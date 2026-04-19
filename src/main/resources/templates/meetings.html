@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Mux Video Rooms</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            padding: 40px 20px;
+        }
+
+        .container { max-width: 800px; margin: 0 auto; }
+
+        h1 { font-size: 28px; margin-bottom: 24px; }
+        h2 { font-size: 18px; margin-bottom: 12px; }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 28px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        input[type=text] {
+            display: block;
+            width: 100%;
+            padding: 9px 12px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            color: white;
+        }
+
+        .btn-blue   { background: #2563eb; }
+        .btn-orange { background: #d97706; }
+        .btn-red    { background: #dc2626; }
+
+        button:hover { opacity: 0.88; }
+
+        .meeting-item {
+            background: white;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+
+        .meeting-info strong { font-size: 16px; }
+
+        .meeting-meta {
+            font-size: 13px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .meeting-code {
+            font-size: 11px;
+            color: #999;
+            margin-top: 3px;
+        }
+
+        .status-active { color: #16a34a; font-weight: 600; }
+        .status-ended  { color: #6b7280; font-weight: 600; }
+
+        .meeting-actions { display: flex; gap: 8px; }
+
+        .empty { color: #999; font-size: 14px; padding: 20px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>🎥 Mux Video Rooms</h1>
+
+    <!-- Create form -->
+    <div class="card">
+        <h2>Create Meeting</h2>
+        <form th:action="@{/meetings/create}" method="post">
+            <input type="text" name="title" placeholder="Meeting title" required/>
+            <input type="text" name="createdBy" placeholder="Your name" required/>
+            <button type="submit" class="btn-blue">+ Create Meeting</button>
+        </form>
+    </div>
+
+    <!-- Meetings list -->
+    <h2>Meetings</h2>
+
+    <p class="empty" th:if="${#lists.isEmpty(meetings)}">
+        No meetings yet. Create one above!
+    </p>
+
+    <div th:each="m : ${meetings}" class="meeting-item">
+        <div class="meeting-info">
+            <strong th:text="${m.title}"></strong>
+            <div class="meeting-meta">
+                By: <span th:text="${m.createdBy}"></span>
+                &nbsp;|&nbsp;
+                Status:
+                <span th:text="${m.status}"
+                      th:classappend="${m.status.name() == 'ACTIVE'} ? 'status-active' : 'status-ended'">
+        </span>
+            </div>
+            <div class="meeting-code">
+                Invite code: <span th:text="${m.inviteCode}"></span>
+            </div>
+        </div>
+
+        <div class="meeting-actions">
+
+            <!-- End -->
+            <form th:if="${m.status.name() == 'ACTIVE'}"
+                  th:action="@{/meetings/end/{id}(id=${m.id})}" method="post">
+                <button type="submit" class="btn-orange">⏹ End</button>
+            </form>
+
+            <!-- Delete -->
+            <form th:action="@{/meetings/delete/{id}(id=${m.id})}" method="post">
+                <button type="submit" class="btn-red"
+                        onclick="return confirm('Delete this meeting?')">
+                    🗑 Delete
+                </button>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
