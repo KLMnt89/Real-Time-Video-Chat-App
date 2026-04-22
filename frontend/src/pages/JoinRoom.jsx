@@ -1,33 +1,35 @@
-import { useState, useEffect, useRef } from 'react'
-import { useParams } from 'react-router-dom'
-import { roomsApi } from '../api'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { roomsApi, notesApi, meetingsApi } from '../api'
+import { useAuth } from '../context/AuthContext'
 import { Room, RoomEvent, Track } from 'livekit-client'
 
-export default function JoinRoom() {
-    const { inviteCode } = useParams()
-    const [name, setName]         = useState('')
-    const [session, setSession]   = useState(null)
-    const [loading, setLoading]   = useState(false)
-    const [error, setError]       = useState(null)
+/* ─── Toast ─────────────────────────────────────────────── */
+function Toast({ toasts }) {
+    return (
+        <div style={{
+            position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 100,
+            pointerEvents: 'none'
+        }}>
+            {toasts.map(t => (
+                <div key={t.id} style={{
+                    background: 'rgba(30,30,40,0.92)', color: 'white',
+                    padding: '9px 18px', borderRadius: 20,
+                    fontSize: 13, backdropFilter: 'blur(8px)',
+                    border: '0.5px solid rgba(255,255,255,0.12)',
+                    animation: 'fadeInUp 0.2s ease'
+                }}>
+                    {t.message}
+                </div>
+            ))}
+        </div>
+    )
+}
 
-    const handleJoin = async () => {
-        if (!name.trim()) return
-        setLoading(true)
-        setError(null)
-        try {
-            const res = await roomsApi.join(inviteCode, name)
-            setSession({ token: res.data.token, url: res.data.url })
-        } catch (e) {
-            setError('Не може да се приклучи — собата можеби не постои или е завршена.')
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    if (session) {
-        return <VideoRoom token={session.token} url={session.url} name={name} inviteCode={inviteCode} />
-    }
-
+/* ─── Login screen ───────────────────────────────────────── */
+function JoinScreen({ inviteCode, onJoin, loading, error }) {
+    const [name, setName] = useState('')
     return (
         <div style={{
             minHeight: '100vh', background: '#f4f6f9',
@@ -39,35 +41,30 @@ export default function JoinRoom() {
             }}>
                 <div style={{ marginBottom: 24, textAlign: 'center' }}>
                     <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 6 }}>
-                        <span style={{ color: '#185FA5' }}>meet</span>flow
+                        <span style={{ color: '#185FA5' }}>hud</span>dle
                     </div>
                     <div style={{ fontSize: 14, color: '#9ca3af' }}>Приклучи се на состанокот</div>
                 </div>
-
                 <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8, fontFamily: 'monospace' }}>
                     {inviteCode}
                 </div>
-
                 <input
-                    placeholder="Твоето име"
+                    placeholder="Твоето ime"
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleJoin()}
+                    onKeyDown={e => e.key === 'Enter' && onJoin(name)}
                     autoFocus
                 />
-
                 {error && (
                     <div style={{
                         background: '#FCEBEB', color: '#A32D2D',
-                        borderRadius: 8, padding: '10px 14px',
-                        fontSize: 13, marginBottom: 12
+                        borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 12
                     }}>
                         {error}
                     </div>
                 )}
-
                 <button
-                    onClick={handleJoin}
+                    onClick={() => onJoin(name)}
                     disabled={loading || !name.trim()}
                     style={{
                         width: '100%', padding: 11,
@@ -82,35 +79,202 @@ export default function JoinRoom() {
     )
 }
 
-function VideoRoom({ token, url, name, inviteCode }) {
-    const localVideoRef  = useRef(null)
-    const remotesDivRef  = useRef(null)
-    const roomRef        = useRef(null)
-    const [muted, setMuted]   = useState(false)
-    const [camOff, setCamOff] = useState(false)
-    const [left, setLeft]     = useState(false)
-    const [joined, setJoined] = useState(false)
-    const [error, setError]   = useState(null)
+/* ─── Post-call screen ───────────────────────────────────── */
+function PostCallScreen({ inviteCode, onRejoin }) {
+    const navigate = useNavigate()
+    return (
+        <div style={{
+            minHeight: '100vh', background: '#f4f6f9',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 16
+        }}>
+            <div style={{ fontSize: 22, fontWeight: 500 }}>
+                <span style={{ color: '#185FA5' }}>hud</span>dle
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>Го напуштивте повикот</div>
+            <div style={{ fontSize: 14, color: '#9ca3af' }}>Надеваме се дека состанокот беше продуктивен!</div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button onClick={() => navigate('/')} style={{
+                    padding: '11px 24px', background: '#185FA5',
+                    color: 'white', border: 'none', borderRadius: 8,
+                    fontSize: 14, cursor: 'pointer', fontWeight: 500
+                }}>
+                    Кон Dashboard
+                </button>
+                <button onClick={onRejoin} style={{
+                    padding: '11px 24px', background: 'white',
+                    color: '#185FA5', border: '1.5px solid #185FA5', borderRadius: 8,
+                    fontSize: 14, cursor: 'pointer', fontWeight: 500
+                }}>
+                    Повторно приклучи се
+                </button>
+            </div>
+        </div>
+    )
+}
+
+/* ─── Confirm dialog ─────────────────────────────────────── */
+function ConfirmLeave({ onConfirm, onCancel }) {
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200
+        }}>
+            <div style={{
+                background: 'white', borderRadius: 16, padding: 28,
+                width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
+            }}>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Напушти повик?</div>
+                <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 24 }}>
+                    Дали сте сигурни дека сакате да го напуштите состанокот?
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button onClick={onCancel} style={{
+                        padding: '9px 20px', background: '#f4f6f9',
+                        border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer'
+                    }}>Откажи</button>
+                    <button onClick={onConfirm} style={{
+                        padding: '9px 20px', background: '#991B1B',
+                        color: 'white', border: 'none', borderRadius: 8,
+                        fontSize: 13, cursor: 'pointer', fontWeight: 500
+                    }}>Напушти</button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/* ─── Main export ────────────────────────────────────────── */
+export default function JoinRoom() {
+    const { inviteCode } = useParams()
+    const { user } = useAuth()
+    const [session, setSession] = useState(null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError]     = useState(null)
+    const [left, setLeft]       = useState(false)
+
+    const displayName = user ? `${user.firstName} ${user.lastName}` : null
+
+    const doJoin = async (name) => {
+        if (!name?.trim()) return
+        setLoading(true)
+        setError(null)
+        try {
+            const res = await roomsApi.join(inviteCode, name)
+            setSession({ token: res.data.token, url: res.data.url, name })
+        } catch {
+            setError('Не може да се приклучи — собата можеби не постои или е завршена.')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     useEffect(() => {
-        const lkRoom = new Room()
+        if (displayName) doJoin(displayName)
+    }, [])
+
+    if (left) return <PostCallScreen inviteCode={inviteCode} onRejoin={() => {
+        setLeft(false)
+        setSession(null)
+        if (displayName) doJoin(displayName)
+    }} />
+
+    if (session) return (
+        <VideoRoom
+            token={session.token}
+            url={session.url}
+            name={session.name}
+            inviteCode={inviteCode}
+            onLeave={() => setLeft(true)}
+        />
+    )
+
+    if (displayName) {
+        return (
+            <div style={{
+                minHeight: '100vh', background: '#f4f6f9',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+                {error ? (
+                    <div style={{
+                        background: 'white', borderRadius: 16, padding: 32,
+                        width: 380, textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                    }}>
+                        <div style={{ color: '#A32D2D', marginBottom: 16 }}>{error}</div>
+                        <button onClick={() => doJoin(displayName)} className="btn btn-primary">
+                            Обиди се повторно
+                        </button>
+                    </div>
+                ) : (
+                    <div style={{ color: '#6b7280', fontSize: 14 }}>Поврзување...</div>
+                )}
+            </div>
+        )
+    }
+
+    return <JoinScreen inviteCode={inviteCode} onJoin={doJoin} loading={loading} error={error} />
+}
+
+/* ─── VideoRoom ──────────────────────────────────────────── */
+function VideoRoom({ token, url, name, inviteCode, onLeave }) {
+    const localVideoRef = useRef(null)
+    const roomRef       = useRef(null)
+
+    const [muted, setMuted]           = useState(false)
+    const [camOff, setCamOff]         = useState(false)
+    const [screenSharing, setScreenSharing] = useState(false)
+    const [joined, setJoined]         = useState(false)
+    const [error, setError]           = useState(null)
+    const [showConfirm, setShowConfirm] = useState(false)
+    const [toasts, setToasts]         = useState([])
+    const [participants, setParticipants] = useState([])
+    const [remoteParticipants, setRemoteParticipants] = useState([])
+    const [rightTab, setRightTab]     = useState('participants')
+    const [noteText, setNoteText]     = useState('')
+    const [noteSaved, setNoteSaved]   = useState(false)
+    const remotesDivRef = useRef(null)
+
+    const addToast = useCallback((message) => {
+        const id = Date.now()
+        setToasts(t => [...t, { id, message }])
+        setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500)
+    }, [])
+
+    const syncParticipants = useCallback((room) => {
+        const list = []
+        room.remoteParticipants.forEach(p => {
+            list.push({ identity: p.identity, connected: true })
+        })
+        setRemoteParticipants([...list])
+        setParticipants([{ identity: name, self: true }, ...list])
+    }, [name])
+
+    useEffect(() => {
+        const lkRoom = new Room({
+            audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true },
+            videoCaptureDefaults: { resolution: { width: 1280, height: 720 } }
+        })
         roomRef.current = lkRoom
 
-        lkRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        lkRoom.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
             if (track.kind === Track.Kind.Video) {
+                const existing = document.getElementById(`video-${participant.identity}`)
+                if (existing) { track.attach(existing); return }
+
                 const videoEl = document.createElement('video')
+                videoEl.id = `video-${participant.identity}`
                 videoEl.autoplay = true
                 videoEl.playsInline = true
-                videoEl.style.cssText = 'width:100%;border-radius:12px;background:#1f2937'
+                videoEl.style.cssText = 'width:100%;height:100%;object-fit:cover;'
                 track.attach(videoEl)
 
                 const wrapper = document.createElement('div')
-                wrapper.id = `participant-${participant.identity}`
-                wrapper.style.cssText = 'position:relative;background:#1f2937;border-radius:12px;overflow:hidden'
+                wrapper.id = `tile-${participant.identity}`
+                wrapper.style.cssText = 'position:relative;background:#1f2937;border-radius:12px;overflow:hidden;aspect-ratio:16/9;'
 
                 const label = document.createElement('div')
                 label.textContent = participant.identity
-                label.style.cssText = 'position:absolute;bottom:8px;left:10px;font-size:12px;color:white;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:4px'
+                label.style.cssText = 'position:absolute;bottom:8px;left:10px;font-size:12px;color:white;background:rgba(0,0,0,0.55);padding:3px 10px;border-radius:20px;'
 
                 wrapper.appendChild(videoEl)
                 wrapper.appendChild(label)
@@ -118,23 +282,30 @@ function VideoRoom({ token, url, name, inviteCode }) {
             } else if (track.kind === Track.Kind.Audio) {
                 const audioEl = document.createElement('audio')
                 audioEl.autoplay = true
-                track.attach(audioEl)
                 audioEl.id = `audio-${participant.identity}`
+                track.attach(audioEl)
                 document.body.appendChild(audioEl)
             }
         })
 
-        lkRoom.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        lkRoom.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
             if (track.kind === Track.Kind.Video) {
-                document.getElementById(`participant-${participant.identity}`)?.remove()
+                document.getElementById(`tile-${participant.identity}`)?.remove()
             } else if (track.kind === Track.Kind.Audio) {
                 document.getElementById(`audio-${participant.identity}`)?.remove()
             }
         })
 
+        lkRoom.on(RoomEvent.ParticipantConnected, (participant) => {
+            addToast(`${participant.identity} се приклучи`)
+            syncParticipants(lkRoom)
+        })
+
         lkRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
-            document.getElementById(`participant-${participant.identity}`)?.remove()
+            document.getElementById(`tile-${participant.identity}`)?.remove()
             document.getElementById(`audio-${participant.identity}`)?.remove()
+            addToast(`${participant.identity} ја напушти собата`)
+            syncParticipants(lkRoom)
         })
 
         lkRoom.on(RoomEvent.Disconnected, () => {
@@ -146,156 +317,273 @@ function VideoRoom({ token, url, name, inviteCode }) {
             try {
                 await lkRoom.connect(url, token)
                 setJoined(true)
-
+                syncParticipants(lkRoom)
                 await lkRoom.localParticipant.enableCameraAndMicrophone()
-
-                const cameraPub = lkRoom.localParticipant.getTrackPublication(Track.Source.Camera)
-                if (cameraPub?.track && localVideoRef.current) {
-                    cameraPub.track.attach(localVideoRef.current)
+                const camPub = lkRoom.localParticipant.getTrackPublication(Track.Source.Camera)
+                if (camPub?.track && localVideoRef.current) {
+                    camPub.track.attach(localVideoRef.current)
                 }
             } catch (e) {
-                console.error('LiveKit connect error:', e)
-                setError('Не може да се поврзе на видео собата: ' + e.message)
+                setError('Не може да се поврзе: ' + e.message)
             }
         }
 
         connect()
 
-        return () => {
-            lkRoom.disconnect()
-        }
+        return () => { lkRoom.disconnect() }
     }, [token, url])
 
     const toggleMute = async () => {
-        await roomRef.current?.localParticipant.setMicrophoneEnabled(muted)
-        setMuted(!muted)
+        const enabled = muted
+        await roomRef.current?.localParticipant.setMicrophoneEnabled(enabled)
+        setMuted(!enabled)
     }
 
     const toggleCam = async () => {
-        await roomRef.current?.localParticipant.setCameraEnabled(camOff)
-        setCamOff(!camOff)
+        const enabled = camOff
+        await roomRef.current?.localParticipant.setCameraEnabled(enabled)
+        setCamOff(!enabled)
     }
 
-    const leaveRoom = async () => {
-        await roomRef.current?.disconnect()
-        setLeft(true)
+    const toggleScreen = async () => {
+        if (!screenSharing) {
+            await roomRef.current?.localParticipant.setScreenShareEnabled(true)
+            setScreenSharing(true)
+        } else {
+            await roomRef.current?.localParticipant.setScreenShareEnabled(false)
+            setScreenSharing(false)
+        }
     }
 
-    if (left) {
-        return (
-            <div style={{
-                minHeight: '100vh', background: '#f4f6f9',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: 16
-            }}>
-                <div style={{ fontSize: 22, fontWeight: 500 }}>
-                    <span style={{ color: '#185FA5' }}>meet</span>flow
-                </div>
-                <div style={{ fontSize: 16, color: '#6b7280' }}>Го напуштивте состанокот.</div>
-                <button onClick={() => window.location.reload()} style={{
-                    padding: '10px 24px', background: '#185FA5',
-                    color: 'white', border: 'none', borderRadius: 8,
-                    fontSize: 14, cursor: 'pointer'
-                }}>
-                    Врати се
-                </button>
-            </div>
-        )
-    }
+    const remoteCount = remoteParticipants.length
+    const gridStyle = remoteCount === 1
+        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, flex: 1 }
+        : remoteCount >= 2
+        ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, flex: 1 }
+        : { display: 'grid', gap: 12, flex: 1 }
 
     return (
-        <div style={{ minHeight: '100vh', background: '#111827', display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+            width: '100vw', height: '100vh', background: '#111827',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden'
+        }}>
+            <style>{`
+                @keyframes fadeInUp {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
 
             {/* Header */}
             <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '14px 24px',
-                background: 'rgba(255,255,255,0.05)',
-                borderBottom: '0.5px solid rgba(255,255,255,0.08)'
+                padding: '12px 20px', flexShrink: 0,
+                background: 'rgba(255,255,255,0.04)',
+                borderBottom: '0.5px solid rgba(255,255,255,0.07)'
             }}>
-                <div style={{ fontSize: 16, fontWeight: 500, color: 'white' }}>
-                    <span style={{ color: '#378ADD' }}>meet</span>flow
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'white' }}>
+                    <span style={{ color: '#378ADD' }}>hud</span>dle
                 </div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>
                     {inviteCode}
                 </div>
                 <div style={{
-                    fontSize: 13, color: 'rgba(255,255,255,0.7)',
-                    background: joined ? 'rgba(29,158,117,0.2)' : 'rgba(255,255,255,0.08)',
-                    padding: '5px 12px', borderRadius: 20,
-                    border: joined ? '0.5px solid rgba(29,158,117,0.4)' : 'none'
+                    fontSize: 12, color: joined ? '#34d399' : 'rgba(255,255,255,0.5)',
+                    background: joined ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.06)',
+                    padding: '4px 12px', borderRadius: 20,
+                    border: joined ? '0.5px solid rgba(52,211,153,0.3)' : 'none'
                 }}>
                     {joined ? '● Поврзан' : 'Поврзување...'} · {name}
                 </div>
             </div>
 
             {error && (
-                <div style={{ background: '#7F1D1D', color: '#FCA5A5', padding: '12px 24px', fontSize: 13 }}>
+                <div style={{ background: '#7F1D1D', color: '#FCA5A5', padding: '10px 20px', fontSize: 13, flexShrink: 0 }}>
                     {error}
                 </div>
             )}
 
-            {/* Video grid */}
-            <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Body */}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-                {/* Local video */}
-                <div style={{ position: 'relative', maxWidth: 480, borderRadius: 12, overflow: 'hidden', background: '#1f2937' }}>
-                    <video
-                        ref={localVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        style={{ width: '100%', display: 'block', borderRadius: 12 }}
-                    />
+                {/* Video area */}
+                <div style={{ flex: 1, position: 'relative', padding: 16, display: 'flex', flexDirection: 'column' }}>
+
+                    {/* Remote grid */}
+                    <div ref={remotesDivRef} style={gridStyle} />
+
+                    {/* Local PiP */}
                     <div style={{
-                        position: 'absolute', bottom: 8, left: 10,
-                        fontSize: 12, color: 'white',
-                        background: 'rgba(0,0,0,0.5)', padding: '2px 8px', borderRadius: 4
+                        position: 'absolute', bottom: 24, right: 24,
+                        width: 180, borderRadius: 12, overflow: 'hidden',
+                        background: '#1f2937', border: '2px solid rgba(255,255,255,0.15)',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)'
                     }}>
-                        {name} (ти)
+                        <video
+                            ref={localVideoRef}
+                            autoPlay muted playsInline
+                            style={{ width: '100%', display: 'block' }}
+                        />
+                        <div style={{
+                            position: 'absolute', bottom: 6, left: 8,
+                            fontSize: 11, color: 'white',
+                            background: 'rgba(0,0,0,0.55)', padding: '2px 8px', borderRadius: 20
+                        }}>
+                            {name} (ти)
+                        </div>
                     </div>
                 </div>
 
-                {/* Remote participants */}
-                <div
-                    ref={remotesDivRef}
-                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}
-                />
+                {/* Right panel */}
+                <div style={{
+                    width: 280, background: 'rgba(255,255,255,0.04)',
+                    borderLeft: '0.5px solid rgba(255,255,255,0.07)',
+                    display: 'flex', flexDirection: 'column', flexShrink: 0
+                }}>
+                    {/* Tabs */}
+                    <div style={{ display: 'flex', borderBottom: '0.5px solid rgba(255,255,255,0.07)' }}>
+                        {['participants', 'notes'].map(tab => (
+                            <button key={tab} onClick={() => setRightTab(tab)} style={{
+                                flex: 1, padding: '12px 0', background: 'transparent', border: 'none',
+                                color: rightTab === tab ? '#378ADD' : 'rgba(255,255,255,0.4)',
+                                fontSize: 12, fontWeight: rightTab === tab ? 600 : 400,
+                                cursor: 'pointer', borderBottom: rightTab === tab ? '2px solid #378ADD' : '2px solid transparent'
+                            }}>
+                                {tab === 'participants' ? 'Учесници' : 'Белешки'}
+                            </button>
+                        ))}
+                    </div>
 
+                    {/* Participants tab */}
+                    {rightTab === 'participants' && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
+                                {participants.length} учесник(и)
+                            </div>
+                            {participants.map(p => (
+                                <div key={p.identity} style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    padding: '8px 4px', borderBottom: '0.5px solid rgba(255,255,255,0.05)'
+                                }}>
+                                    <div style={{
+                                        width: 28, height: 28, borderRadius: '50%',
+                                        background: '#185FA5', color: 'white',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 10, fontWeight: 600, flexShrink: 0
+                                    }}>
+                                        {p.identity?.[0]?.toUpperCase()}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: 12, color: 'white' }}>
+                                            {p.identity} {p.self ? '(ти)' : ''}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: '#34d399' }}>● Поврзан</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Notes tab */}
+                    {rightTab === 'notes' && (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, gap: 8 }}>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                                Белешки за состанокот
+                            </div>
+                            <textarea
+                                value={noteText}
+                                onChange={e => setNoteText(e.target.value)}
+                                placeholder="Запишете белешки тука..."
+                                style={{
+                                    flex: 1, background: 'rgba(255,255,255,0.06)',
+                                    border: '0.5px solid rgba(255,255,255,0.1)',
+                                    borderRadius: 8, color: 'white', fontSize: 13,
+                                    padding: 10, resize: 'none', outline: 'none',
+                                    fontFamily: 'inherit'
+                                }}
+                            />
+                            <button
+                                onClick={() => {
+                                    localStorage.setItem(`note-${inviteCode}`, noteText)
+                                    setNoteSaved(true)
+                                    setTimeout(() => setNoteSaved(false), 2000)
+                                }}
+                                style={{
+                                    padding: '8px 0', background: '#185FA5',
+                                    color: 'white', border: 'none', borderRadius: 8,
+                                    fontSize: 12, cursor: 'pointer'
+                                }}>
+                                {noteSaved ? '✓ Зачувано' : 'Зачувај белешки'}
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Controls */}
             <div style={{
-                padding: '20px 24px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                background: 'rgba(255,255,255,0.03)',
-                borderTop: '0.5px solid rgba(255,255,255,0.06)'
+                padding: '14px 24px', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                background: 'rgba(0,0,0,0.4)', borderTop: '0.5px solid rgba(255,255,255,0.06)'
             }}>
-                <button onClick={toggleMute} style={{
-                    width: 52, height: 52, borderRadius: '50%',
-                    background: muted ? '#7F1D1D' : 'rgba(255,255,255,0.1)',
-                    border: 'none', cursor: 'pointer', fontSize: 20
-                }}>
-                    {muted ? '🔇' : '🎤'}
-                </button>
-
-                <button onClick={toggleCam} style={{
-                    width: 52, height: 52, borderRadius: '50%',
-                    background: camOff ? '#7F1D1D' : 'rgba(255,255,255,0.1)',
-                    border: 'none', cursor: 'pointer', fontSize: 20
-                }}>
-                    {camOff ? '📵' : '📹'}
-                </button>
-
-                <button onClick={leaveRoom} style={{
-                    padding: '14px 28px', borderRadius: 26,
-                    background: '#991B1B', color: 'white',
-                    border: 'none', cursor: 'pointer',
-                    fontSize: 14, fontWeight: 500
-                }}>
-                    Напушти
+                <CtrlBtn active={muted} onClick={toggleMute} danger={muted} title={muted ? 'Вклучи микрофон' : 'Исклучи микрофон'}>
+                    {muted ? <MicOffIcon /> : <MicIcon />}
+                </CtrlBtn>
+                <CtrlBtn active={camOff} onClick={toggleCam} danger={camOff} title={camOff ? 'Вклучи камера' : 'Исклучи камера'}>
+                    {camOff ? <CamOffIcon /> : <CamIcon />}
+                </CtrlBtn>
+                <CtrlBtn active={screenSharing} onClick={toggleScreen} title="Сподели екран">
+                    <ScreenIcon />
+                </CtrlBtn>
+                <button
+                    onClick={() => setShowConfirm(true)}
+                    title="Напушти повик"
+                    style={{
+                        width: 52, height: 52, borderRadius: '50%',
+                        background: '#991B1B', border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white'
+                    }}>
+                    <PhoneOffIcon />
                 </button>
             </div>
+
+            {showConfirm && (
+                <ConfirmLeave
+                    onConfirm={async () => {
+                        await roomRef.current?.disconnect()
+                        setShowConfirm(false)
+                        onLeave()
+                    }}
+                    onCancel={() => setShowConfirm(false)}
+                />
+            )}
+
+            <Toast toasts={toasts} />
         </div>
     )
 }
+
+/* ─── Control button ─────────────────────────────────────── */
+function CtrlBtn({ children, onClick, danger, active, title }) {
+    return (
+        <button onClick={onClick} title={title} style={{
+            width: 52, height: 52, borderRadius: '50%',
+            background: danger ? '#7F1D1D' : active ? 'rgba(56,130,221,0.2)' : 'rgba(255,255,255,0.1)',
+            border: active && !danger ? '1.5px solid #378ADD' : 'none',
+            cursor: 'pointer', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.15s'
+        }}>
+            {children}
+        </button>
+    )
+}
+
+/* ─── SVG Icons ──────────────────────────────────────────── */
+const MicIcon    = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9v-2.07A7.001 7.001 0 0019 11h-2a5 5 0 01-10 0H5a7.001 7.001 0 007 6.93V20H9v2h6v-2h-3z"/></svg>
+const MicOffIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>
+const CamIcon    = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+const CamOffIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z"/></svg>
+const ScreenIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h3l-1 1v2h12v-2l-1-1h3c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 13H4V5h16v11z"/></svg>
+const PhoneOffIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.76 14.37l-4.72-4.72c-.28-.28-.67-.37-1.03-.25l-4.01 1.34c-.32.11-.56.37-.65.69l-.72 2.59c-2.33-.62-5.07-2.41-6.3-4.94l2.52-.84c.32-.11.56-.38.64-.71l1-4.11c.08-.34-.03-.69-.29-.92L5.52.24C5.24-.02 4.84-.07 4.5.1L.58 2.29C.23 2.48 0 2.84 0 3.24c.28 10.32 8.99 18.87 19.27 18.76.41 0 .77-.25.94-.62l2.18-4.01c.17-.33.13-.74-.13-1z"/></svg>

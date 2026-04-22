@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { meetingsApi, contactsApi, roomsApi } from '../api'
+import { useAuth } from '../context/AuthContext'
 import TopBar from '../components/TopBar'
 
 export default function Dashboard() {
+    const { user } = useAuth()
     const [todayMeetings, setTodayMeetings]   = useState([])
     const [contacts, setContacts]             = useState([])
     const [activeRooms, setActiveRooms]       = useState([])
@@ -10,27 +12,43 @@ export default function Dashboard() {
     const [generatedRoom, setGeneratedRoom]   = useState(null)
     const [copied, setCopied]                 = useState(false)
     const [loading, setLoading]               = useState(false)
+    const [fetchLoading, setFetchLoading]     = useState(true)
+    const [fetchError, setFetchError]         = useState(null)
+    const [genError, setGenError]             = useState(null)
 
     useEffect(() => {
-        meetingsApi.getToday().then(r => setTodayMeetings(r.data))
-        contactsApi.getAll().then(r => setContacts(r.data))
-        roomsApi.getActive().then(r => setActiveRooms(r.data))
+        setFetchLoading(true)
+        Promise.all([
+            meetingsApi.getToday(),
+            contactsApi.getAll(),
+            roomsApi.getActive()
+        ]).then(([m, c, r]) => {
+            setTodayMeetings(m.data)
+            setContacts(c.data)
+            setActiveRooms(r.data)
+        }).catch(() => setFetchError('Грешка при вчитување на податоците'))
+          .finally(() => setFetchLoading(false))
     }, [])
 
     const generateLink = async () => {
         setLoading(true)
         try {
+            const now = new Date()
+            const hh = String(now.getHours()).padStart(2, '0')
+            const mm = String(now.getMinutes()).padStart(2, '0')
             const res = await roomsApi.create({
-                name: `Соба ${new Date().toLocaleTimeString('mk-MK')}`,
-                createdBy: 'admin'
+                name: `Соба ${hh}:${mm}`,
+                createdBy: user ? `${user.firstName} ${user.lastName}` : 'admin'
             })
             const room = res.data
-            setGeneratedLink(`${window.location.origin}/join/${room.inviteCode}`)
+            const link = `${window.location.origin}/join/${room.inviteCode}`
+            setGeneratedLink(link)
             setGeneratedRoom(room)
             setCopied(false)
             roomsApi.getActive().then(r => setActiveRooms(r.data))
+            window.open(link, '_blank')
         } catch (e) {
-            alert('Грешка при креирање соба')
+            setGenError('Грешка при креирање соба. Проверете дали серверот е активен.')
         } finally {
             setLoading(false)
         }
@@ -58,6 +76,15 @@ export default function Dashboard() {
     const avatarColors = ['#E6F1FB:#0C447C','#EEEDFE:#3C3489','#EAF3DE:#27500A','#FAEEDA:#633806','#FBEAF0:#72243E','#E1F5EE:#085041']
     const avatarColor  = (i) => { const [bg, color] = avatarColors[i % avatarColors.length].split(':'); return { background: bg, color } }
 
+    if (fetchLoading) return (
+        <div className="main-content">
+            <TopBar title="Dashboard" />
+            <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+                <div style={{ color: '#9ca3af', fontSize: 14 }}>Вчитување...</div>
+            </div>
+        </div>
+    )
+
     return (
         <div className="main-content">
             <TopBar title="Dashboard" action={
@@ -66,6 +93,16 @@ export default function Dashboard() {
                 </button>
             } />
             <div className="page">
+            {fetchError && (
+                <div style={{ background:'#FCEBEB', color:'#A32D2D', borderRadius:8, padding:'10px 14px', fontSize:13, marginBottom:16 }}>
+                    {fetchError}
+                </div>
+            )}
+            {genError && (
+                <div style={{ background:'#FCEBEB', color:'#A32D2D', borderRadius:8, padding:'10px 14px', fontSize:13, marginBottom:16 }}>
+                    {genError}
+                </div>
+            )}
 
                 {/* Stats */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
@@ -104,7 +141,7 @@ export default function Dashboard() {
                             color: generatedLink ? '#1a1a2e' : '#9ca3af',
                             fontFamily: 'monospace'
                         }}>
-                            {generatedLink || 'meetflow.app/join/—'}
+                            {generatedLink || 'huddle/join/—'}
                         </div>
                         {generatedLink && (
                             <button className="btn btn-sm" onClick={copyLink}>
