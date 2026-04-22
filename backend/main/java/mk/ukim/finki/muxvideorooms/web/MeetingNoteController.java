@@ -1,16 +1,18 @@
 package mk.ukim.finki.muxvideorooms.web;
 
+import jakarta.validation.constraints.NotBlank;
 import mk.ukim.finki.muxvideorooms.model.MeetingNote;
 import mk.ukim.finki.muxvideorooms.service.MeetingNoteService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Validated
 @RestController
 @RequestMapping("/api/meetings/{meetingId}/notes")
-@CrossOrigin(origins = "*")
 public class MeetingNoteController {
 
     private final MeetingNoteService noteService;
@@ -26,8 +28,8 @@ public class MeetingNoteController {
 
     @PostMapping
     public ResponseEntity<MeetingNote> create(@PathVariable Long meetingId,
-                                              @RequestParam String content,
-                                              @RequestParam String writtenBy) {
+                                              @RequestParam @NotBlank String content,
+                                              @RequestParam @NotBlank String writtenBy) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(noteService.create(meetingId, content, writtenBy));
     }

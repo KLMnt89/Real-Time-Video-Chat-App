@@ -1,17 +1,20 @@
 package mk.ukim.finki.muxvideorooms.web;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import mk.ukim.finki.muxvideorooms.model.Contact;
 import mk.ukim.finki.muxvideorooms.model.enums.ContactStatus;
 import mk.ukim.finki.muxvideorooms.service.ContactService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Validated
 @RestController
 @RequestMapping("/api/contacts")
-@CrossOrigin(origins = "*")
 public class ContactController {
 
     private final ContactService contactService;
@@ -34,9 +37,9 @@ public class ContactController {
     }
 
     @PostMapping
-    public ResponseEntity<Contact> create(@RequestParam String firstName,
-                                          @RequestParam String lastName,
-                                          @RequestParam String email,
+    public ResponseEntity<Contact> create(@RequestParam @NotBlank String firstName,
+                                          @RequestParam @NotBlank String lastName,
+                                          @RequestParam @NotBlank @Email String email,
                                           @RequestParam(required = false) String phone) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(contactService.create(firstName, lastName, email, phone));
@@ -44,9 +47,9 @@ public class ContactController {
 
     @PutMapping("/{id}")
     public Contact update(@PathVariable Long id,
-                          @RequestParam String firstName,
-                          @RequestParam String lastName,
-                          @RequestParam String email,
+                          @RequestParam @NotBlank String firstName,
+                          @RequestParam @NotBlank String lastName,
+                          @RequestParam @NotBlank @Email String email,
                           @RequestParam(required = false) String phone) {
         return contactService.update(id, firstName, lastName, email, phone);
     }

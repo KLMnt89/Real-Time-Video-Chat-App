@@ -28,6 +28,13 @@ export default function Meetings() {
         load()
     }
 
+    const handleStart = async (id) => {
+        const res = await meetingsApi.start(id, { createdBy: 'admin' })
+        load()
+        const inviteCode = res.data.room?.inviteCode
+        if (inviteCode) window.open(`/join/${inviteCode}`, '_blank')
+    }
+
     const handleEnd = async (id) => { await meetingsApi.end(id); load() }
     const handleCancel = async (id) => { await meetingsApi.cancel(id); load() }
     const handleDelete = async (id) => { if (confirm('Избриши состанок?')) { await meetingsApi.delete(id); load() } }
@@ -80,7 +87,7 @@ export default function Meetings() {
                                     <div style={{ display: 'flex', gap: 6 }}>
                                         {m.status === 'SCHEDULED' && (
                                             <button className="btn btn-sm" style={{ background: '#E1F5EE', color: '#085041', border: 'none' }}
-                                                    onClick={() => meetingsApi.start(m.id, { createdBy: 'admin' }).then(load)}>
+                                                    onClick={() => handleStart(m.id)}>
                                                 Старт
                                             </button>
                                         )}

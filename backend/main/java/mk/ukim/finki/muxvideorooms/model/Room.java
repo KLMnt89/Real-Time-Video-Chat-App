@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import mk.ukim.finki.muxvideorooms.model.enums.RoomStatus;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -19,7 +21,7 @@ public class Room {
     private Long id;
 
     private String name;
-    private String muxSpaceId;
+    private String liveKitRoomName;
     private String inviteCode;
 
     @Enumerated(EnumType.STRING)
@@ -30,6 +32,7 @@ public class Room {
     private String createdBy;
 
     @ManyToMany
+    @Fetch(FetchMode.SUBSELECT)
     @JoinTable(
             name = "room_participants",
             joinColumns = @JoinColumn(name = "room_id"),

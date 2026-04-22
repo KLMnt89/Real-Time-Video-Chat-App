@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { roomsApi } from '../api'
-import { Space } from '@mux/spaces-web'
+import { Room, RoomEvent, Track } from 'livekit-client'
 
 export default function JoinRoom() {
     const { inviteCode } = useParams()
-    const [name, setName]       = useState('')
-    const [token, setToken]     = useState(null)
-    const [loading, setLoading] = useState(false)
-    const [error, setError]     = useState(null)
+    const [name, setName]         = useState('')
+    const [session, setSession]   = useState(null)
+    const [loading, setLoading]   = useState(false)
+    const [error, setError]       = useState(null)
 
     const handleJoin = async () => {
         if (!name.trim()) return
@@ -16,7 +16,7 @@ export default function JoinRoom() {
         setError(null)
         try {
             const res = await roomsApi.join(inviteCode, name)
-            setToken(res.data.token)
+            setSession({ token: res.data.token, url: res.data.url })
         } catch (e) {
             setError('Не може да се приклучи — собата можеби не постои или е завршена.')
         } finally {
@@ -24,8 +24,8 @@ export default function JoinRoom() {
         }
     }
 
-    if (token) {
-        return <VideoRoom token={token} name={name} inviteCode={inviteCode} />
+    if (session) {
+        return <VideoRoom token={session.token} url={session.url} name={name} inviteCode={inviteCode} />
     }
 
     return (
@@ -82,10 +82,10 @@ export default function JoinRoom() {
     )
 }
 
-function VideoRoom({ token, name, inviteCode }) {
+function VideoRoom({ token, url, name, inviteCode }) {
     const localVideoRef  = useRef(null)
     const remotesDivRef  = useRef(null)
-    const spaceRef       = useRef(null)
+    const roomRef        = useRef(null)
     const [muted, setMuted]   = useState(false)
     const [camOff, setCamOff] = useState(false)
     const [left, setLeft]     = useState(false)
@@ -93,92 +93,91 @@ function VideoRoom({ token, name, inviteCode }) {
     const [error, setError]   = useState(null)
 
     useEffect(() => {
-        let localParticipant = null
+        const lkRoom = new Room()
+        roomRef.current = lkRoom
 
-        const join = async () => {
+        lkRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            if (track.kind === Track.Kind.Video) {
+                const videoEl = document.createElement('video')
+                videoEl.autoplay = true
+                videoEl.playsInline = true
+                videoEl.style.cssText = 'width:100%;border-radius:12px;background:#1f2937'
+                track.attach(videoEl)
+
+                const wrapper = document.createElement('div')
+                wrapper.id = `participant-${participant.identity}`
+                wrapper.style.cssText = 'position:relative;background:#1f2937;border-radius:12px;overflow:hidden'
+
+                const label = document.createElement('div')
+                label.textContent = participant.identity
+                label.style.cssText = 'position:absolute;bottom:8px;left:10px;font-size:12px;color:white;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:4px'
+
+                wrapper.appendChild(videoEl)
+                wrapper.appendChild(label)
+                remotesDivRef.current?.appendChild(wrapper)
+            } else if (track.kind === Track.Kind.Audio) {
+                const audioEl = document.createElement('audio')
+                audioEl.autoplay = true
+                track.attach(audioEl)
+                audioEl.id = `audio-${participant.identity}`
+                document.body.appendChild(audioEl)
+            }
+        })
+
+        lkRoom.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+            if (track.kind === Track.Kind.Video) {
+                document.getElementById(`participant-${participant.identity}`)?.remove()
+            } else if (track.kind === Track.Kind.Audio) {
+                document.getElementById(`audio-${participant.identity}`)?.remove()
+            }
+        })
+
+        lkRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
+            document.getElementById(`participant-${participant.identity}`)?.remove()
+            document.getElementById(`audio-${participant.identity}`)?.remove()
+        })
+
+        lkRoom.on(RoomEvent.Disconnected, () => {
+            setError('Врската со собата е прекината.')
+            setJoined(false)
+        })
+
+        const connect = async () => {
             try {
-                const space = new Space(token)
-                spaceRef.current = space
-
-                // Кога некој друг се приклучува — прикажи го неговото видео
-                space.on('participantTrackSubscribed', (participant, track) => {
-                    if (track.kind === 'video') {
-                        const videoEl = document.createElement('video')
-                        videoEl.autoplay = true
-                        videoEl.playsInline = true
-                        videoEl.style.cssText = 'width:100%;border-radius:12px;background:#1f2937'
-                        track.attach(videoEl)
-
-                        const wrapper = document.createElement('div')
-                        wrapper.id = `participant-${participant.id}`
-                        wrapper.style.cssText = 'position:relative;background:#1f2937;border-radius:12px;overflow:hidden'
-
-                        const label = document.createElement('div')
-                        label.textContent = participant.id
-                        label.style.cssText = 'position:absolute;bottom:8px;left:10px;font-size:12px;color:white;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:4px'
-
-                        wrapper.appendChild(videoEl)
-                        wrapper.appendChild(label)
-                        remotesDivRef.current?.appendChild(wrapper)
-                    }
-                })
-
-                // Кога некој излегува — отстрани го
-                space.on('participantLeft', (participant) => {
-                    document.getElementById(`participant-${participant.id}`)?.remove()
-                })
-
-                // Приклучи се на Space-от
-                localParticipant = await space.join()
+                await lkRoom.connect(url, token)
                 setJoined(true)
 
-                // Вклучи камера и микрофон
-                const localTracks = await localParticipant.publishTracks({
-                    audio: true,
-                    video: true
-                })
+                await lkRoom.localParticipant.enableCameraAndMicrophone()
 
-                // Прикажи локално видео
-                const videoTrack = localTracks.find(t => t.kind === 'video')
-                if (videoTrack && localVideoRef.current) {
-                    videoTrack.attach(localVideoRef.current)
+                const cameraPub = lkRoom.localParticipant.getTrackPublication(Track.Source.Camera)
+                if (cameraPub?.track && localVideoRef.current) {
+                    cameraPub.track.attach(localVideoRef.current)
                 }
-
             } catch (e) {
-                console.error('Space join error:', e)
+                console.error('LiveKit connect error:', e)
                 setError('Не може да се поврзе на видео собата: ' + e.message)
             }
         }
 
-        join()
+        connect()
 
         return () => {
-            spaceRef.current?.leave()
+            lkRoom.disconnect()
         }
-    }, [token])
+    }, [token, url])
 
     const toggleMute = async () => {
-        const participants = spaceRef.current?.localParticipant
-        if (!participants) return
-        const audioTrack = participants.audioTracks?.[0]
-        if (audioTrack) {
-            muted ? await audioTrack.unmute() : await audioTrack.mute()
-            setMuted(!muted)
-        }
+        await roomRef.current?.localParticipant.setMicrophoneEnabled(muted)
+        setMuted(!muted)
     }
 
     const toggleCam = async () => {
-        const participants = spaceRef.current?.localParticipant
-        if (!participants) return
-        const videoTrack = participants.videoTracks?.[0]
-        if (videoTrack) {
-            camOff ? await videoTrack.unmute() : await videoTrack.mute()
-            setCamOff(!camOff)
-        }
+        await roomRef.current?.localParticipant.setCameraEnabled(camOff)
+        setCamOff(!camOff)
     }
 
     const leaveRoom = async () => {
-        await spaceRef.current?.leave()
+        await roomRef.current?.disconnect()
         setLeft(true)
     }
 
@@ -239,7 +238,7 @@ function VideoRoom({ token, name, inviteCode }) {
             {/* Video grid */}
             <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                {/* Локално видео */}
+                {/* Local video */}
                 <div style={{ position: 'relative', maxWidth: 480, borderRadius: 12, overflow: 'hidden', background: '#1f2937' }}>
                     <video
                         ref={localVideoRef}
@@ -257,7 +256,7 @@ function VideoRoom({ token, name, inviteCode }) {
                     </div>
                 </div>
 
-                {/* Remote учесници */}
+                {/* Remote participants */}
                 <div
                     ref={remotesDivRef}
                     style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}

@@ -1,17 +1,19 @@
 package mk.ukim.finki.muxvideorooms.web;
 
+import jakarta.validation.constraints.NotBlank;
 import mk.ukim.finki.muxvideorooms.model.Room;
 import mk.ukim.finki.muxvideorooms.service.RoomService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
+@Validated
 @RestController
 @RequestMapping("/api/rooms")
-@CrossOrigin(origins = "*")
 public class RoomController {
 
     private final RoomService roomService;
@@ -36,8 +38,8 @@ public class RoomController {
     }
 
     @PostMapping
-    public ResponseEntity<Room> create(@RequestParam String name,
-                                       @RequestParam String createdBy,
+    public ResponseEntity<Room> create(@RequestParam @NotBlank String name,
+                                       @RequestParam @NotBlank String createdBy,
                                        @RequestParam(required = false) List<Long> participantIds) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(roomService.create(name, createdBy, participantIds));
@@ -56,8 +58,7 @@ public class RoomController {
     @PostMapping("/join/{inviteCode}")
     public ResponseEntity<Map<String, String>> join(@PathVariable String inviteCode,
                                                     @RequestParam String participantId) {
-        String token = roomService.joinRoom(inviteCode, participantId);
-        return ResponseEntity.ok(Map.of("token", token));
+        return ResponseEntity.ok(roomService.joinRoom(inviteCode, participantId));
     }
 
     @PostMapping("/{id}/end")

@@ -25,12 +25,12 @@ export default function Dashboard() {
                 createdBy: 'admin'
             })
             const room = res.data
-            setGeneratedLink(`http://localhost:5173/join/${room.inviteCode}`)
+            setGeneratedLink(`${window.location.origin}/join/${room.inviteCode}`)
             setGeneratedRoom(room)
             setCopied(false)
             roomsApi.getActive().then(r => setActiveRooms(r.data))
         } catch (e) {
-            alert('Грешка при креирање соба — провери Mux credentials')
+            alert('Грешка при креирање соба')
         } finally {
             setLoading(false)
         }
@@ -89,7 +89,7 @@ export default function Dashboard() {
                         <div>
                             <div style={{ fontSize: 14, fontWeight: 500, color: '#185FA5' }}>Генерирај link за состанок</div>
                             <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
-                                Создај нова Mux соба и сподели го линкот со учесниците
+                                Создај нова LiveKit соба и сподели го линкот со учесниците
                             </div>
                         </div>
                         <button className="btn btn-primary" onClick={generateLink} disabled={loading}>
@@ -121,9 +121,9 @@ export default function Dashboard() {
                             fontSize: 12, color: '#085041',
                             display: 'flex', gap: 16
                         }}>
-                            <span>✓ Mux Space креиран</span>
+                            <span>✓ LiveKit Room креиран</span>
                             <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>
-                ID: {generatedRoom.muxSpaceId}
+                ID: {generatedRoom.liveKitRoomName}
               </span>
                             <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>
                 Code: {generatedRoom.inviteCode}

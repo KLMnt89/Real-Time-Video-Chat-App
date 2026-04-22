@@ -101,6 +101,10 @@ public class MeetingService {
     }
 
     public void delete(Long id) {
-        meetingRepository.deleteById(id);
+        Meeting meeting = getById(id);
+        if (meeting.getRoom() != null) {
+            roomService.endRoom(meeting.getRoom().getId());
+        }
+        meetingRepository.delete(meeting);
     }
 }

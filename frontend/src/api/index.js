@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const index = axios.create({
-    baseURL: 'http://localhost:8080/api'
+    baseURL: '/api'
 })
 
 export const contactsApi = {

@@ -12,7 +12,7 @@ export default function Rooms() {
     const handleDelete = async (id) => { if (confirm('Избриши соба?')) { await roomsApi.delete(id); load() } }
 
     const copyInvite = (code) => {
-        navigator.clipboard.writeText(`http://localhost:5173/join/${code}`)
+        navigator.clipboard.writeText(`${window.location.origin}/join/${code}`)
         alert('Линкот е копиран!')
     }
 

@@ -1,18 +1,20 @@
 package mk.ukim.finki.muxvideorooms.web;
 
+import jakarta.validation.constraints.NotBlank;
 import mk.ukim.finki.muxvideorooms.model.Meeting;
 import mk.ukim.finki.muxvideorooms.model.enums.MeetingStatus;
 import mk.ukim.finki.muxvideorooms.service.MeetingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Validated
 @RestController
 @RequestMapping("/api/meetings")
-@CrossOrigin(origins = "*")
 public class MeetingController {
 
     private final MeetingService meetingService;
@@ -38,10 +40,10 @@ public class MeetingController {
     }
 
     @PostMapping
-    public ResponseEntity<Meeting> create(@RequestParam String title,
+    public ResponseEntity<Meeting> create(@RequestParam @NotBlank String title,
                                           @RequestParam(required = false) String description,
-                                          @RequestParam String scheduledAt,
-                                          @RequestParam String createdBy,
+                                          @RequestParam @NotBlank String scheduledAt,
+                                          @RequestParam @NotBlank String createdBy,
                                           @RequestParam(required = false) List<Long> participantIds) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(meetingService.create(title, description,

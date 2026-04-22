@@ -3,6 +3,8 @@ package mk.ukim.finki.muxvideorooms.service;
 import mk.ukim.finki.muxvideorooms.model.Contact;
 import mk.ukim.finki.muxvideorooms.model.enums.ContactStatus;
 import mk.ukim.finki.muxvideorooms.repository.ContactRepository;
+import mk.ukim.finki.muxvideorooms.repository.MeetingRepository;
+import mk.ukim.finki.muxvideorooms.repository.RoomRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +16,15 @@ import java.util.List;
 public class ContactService {
 
     private final ContactRepository contactRepository;
+    private final RoomRepository roomRepository;
+    private final MeetingRepository meetingRepository;
 
-    public ContactService(ContactRepository contactRepository) {
+    public ContactService(ContactRepository contactRepository,
+                          RoomRepository roomRepository,
+                          MeetingRepository meetingRepository) {
         this.contactRepository = contactRepository;
+        this.roomRepository = roomRepository;
+        this.meetingRepository = meetingRepository;
     }
 
     public List<Contact> getAll() {
@@ -67,6 +75,17 @@ public class ContactService {
     }
 
     public void delete(Long id) {
-        contactRepository.deleteById(id);
+        Contact contact = getById(id);
+        roomRepository.findAll().forEach(room -> {
+            if (room.getParticipants().remove(contact)) {
+                roomRepository.save(room);
+            }
+        });
+        meetingRepository.findAll().forEach(meeting -> {
+            if (meeting.getParticipants().remove(contact)) {
+                meetingRepository.save(meeting);
+            }
+        });
+        contactRepository.delete(contact);
     }
 }

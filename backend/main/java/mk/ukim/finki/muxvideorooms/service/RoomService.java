@@ -5,11 +5,13 @@ import mk.ukim.finki.muxvideorooms.model.Room;
 import mk.ukim.finki.muxvideorooms.model.enums.RoomStatus;
 import mk.ukim.finki.muxvideorooms.repository.ContactRepository;
 import mk.ukim.finki.muxvideorooms.repository.RoomRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -18,14 +20,17 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final ContactRepository contactRepository;
-    private final MuxService muxService;
+    private final LiveKitService liveKitService;
+
+    @Value("${livekit.public-url:ws://localhost:7880}")
+    private String liveKitPublicUrl;
 
     public RoomService(RoomRepository roomRepository,
                        ContactRepository contactRepository,
-                       MuxService muxService) {
+                       LiveKitService liveKitService) {
         this.roomRepository = roomRepository;
         this.contactRepository = contactRepository;
-        this.muxService = muxService;
+        this.liveKitService = liveKitService;
     }
 
     public List<Room> getAll() {
@@ -47,10 +52,10 @@ public class RoomService {
     }
 
     public Room create(String name, String createdBy, List<Long> participantIds) {
-        String muxSpaceId = muxService.createSpace();
+        String liveKitRoomName = liveKitService.createRoom();
         Room room = new Room();
         room.setName(name);
-        room.setMuxSpaceId(muxSpaceId);
+        room.setLiveKitRoomName(liveKitRoomName);
         room.setInviteCode(UUID.randomUUID().toString());
         room.setStatus(RoomStatus.ACTIVE);
         room.setCreatedAt(LocalDateTime.now());
@@ -78,17 +83,18 @@ public class RoomService {
         return roomRepository.save(room);
     }
 
-    public String joinRoom(String inviteCode, String participantId) {
+    public Map<String, String> joinRoom(String inviteCode, String participantId) {
         Room room = getByInviteCode(inviteCode);
         if (room.getStatus() == RoomStatus.ENDED) {
             throw new RuntimeException("Room has ended");
         }
-        return muxService.createParticipantToken(room.getMuxSpaceId(), participantId);
+        String token = liveKitService.createParticipantToken(room.getLiveKitRoomName(), participantId);
+        return Map.of("token", token, "url", liveKitPublicUrl);
     }
 
     public Room endRoom(Long id) {
         Room room = getById(id);
-        muxService.deleteSpace(room.getMuxSpaceId());
+        liveKitService.deleteRoom(room.getLiveKitRoomName());
         room.setStatus(RoomStatus.ENDED);
         room.setEndedAt(LocalDateTime.now());
         return roomRepository.save(room);
@@ -97,7 +103,7 @@ public class RoomService {
     public void delete(Long id) {
         Room room = getById(id);
         if (room.getStatus() == RoomStatus.ACTIVE) {
-            muxService.deleteSpace(room.getMuxSpaceId());
+            liveKitService.deleteRoom(room.getLiveKitRoomName());
         }
         roomRepository.delete(room);
     }

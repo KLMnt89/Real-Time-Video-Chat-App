@@ -2,14 +2,24 @@ package mk.ukim.finki.muxvideorooms.repository;
 
 import mk.ukim.finki.muxvideorooms.model.Meeting;
 import mk.ukim.finki.muxvideorooms.model.enums.MeetingStatus;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 public interface MeetingRepository extends JpaRepository<Meeting, Long> {
+
+    @Override
+    @EntityGraph(attributePaths = {"participants", "room"})
+    List<Meeting> findAll();
+
+    @EntityGraph(attributePaths = {"participants", "room"})
     List<Meeting> findByStatus(MeetingStatus status);
-    List<Meeting> findByCreatedBy(String createdBy);
+
+    @EntityGraph(attributePaths = {"participants", "room"})
     List<Meeting> findByScheduledAtBetween(LocalDateTime from, LocalDateTime to);
+
+    List<Meeting> findByCreatedBy(String createdBy);
     List<Meeting> findByParticipants_Id(Long contactId);
 }
