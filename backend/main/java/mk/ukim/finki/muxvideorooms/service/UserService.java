@@ -1,5 +1,6 @@
 package mk.ukim.finki.muxvideorooms.service;
 
+import jakarta.annotation.PostConstruct;
 import mk.ukim.finki.muxvideorooms.model.User;
 import mk.ukim.finki.muxvideorooms.model.enums.UserRole;
 import mk.ukim.finki.muxvideorooms.repository.UserRepository;
@@ -22,6 +23,11 @@ public class UserService implements UserDetailsService {
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    @PostConstruct
+    public void init() {
+        createAdminIfNotExists();
     }
 
     @Override
