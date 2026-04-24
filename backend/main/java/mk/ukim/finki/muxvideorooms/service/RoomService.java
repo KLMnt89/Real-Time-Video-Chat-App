@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,16 +22,19 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final ContactRepository contactRepository;
     private final LiveKitService liveKitService;
+    private final SseService sseService;
 
     @Value("${livekit.public-url:ws://localhost:7880}")
     private String liveKitPublicUrl;
 
     public RoomService(RoomRepository roomRepository,
                        ContactRepository contactRepository,
-                       LiveKitService liveKitService) {
+                       LiveKitService liveKitService,
+                       SseService sseService) {
         this.roomRepository = roomRepository;
         this.contactRepository = contactRepository;
         this.liveKitService = liveKitService;
+        this.sseService = sseService;
     }
 
     public List<Room> getAll() {
@@ -51,6 +55,23 @@ public class RoomService {
         return roomRepository.findByStatus(RoomStatus.ACTIVE);
     }
 
+    public Map<String, Object> createWithHostToken(String name, String createdBy, String hostIdentity, List<Long> participantIds) {
+        Room room = create(name, createdBy, participantIds);
+        String identity = (hostIdentity != null && !hostIdentity.isBlank()) ? hostIdentity : createdBy;
+        String token = liveKitService.createParticipantToken(room.getLiveKitRoomName(), identity, createdBy);
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", room.getId());
+        result.put("name", room.getName());
+        result.put("inviteCode", room.getInviteCode());
+        result.put("liveKitRoomName", room.getLiveKitRoomName());
+        result.put("status", room.getStatus().name());
+        result.put("createdBy", room.getCreatedBy());
+        result.put("createdAt", room.getCreatedAt());
+        result.put("token", token);
+        result.put("url", liveKitPublicUrl);
+        return result;
+    }
+
     public Room create(String name, String createdBy, List<Long> participantIds) {
         String liveKitRoomName = liveKitService.createRoom();
         Room room = new Room();
@@ -64,7 +85,13 @@ public class RoomService {
             List<Contact> participants = contactRepository.findAllById(participantIds);
             room.setParticipants(participants);
         }
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+        sseService.broadcast("room.created", Map.of(
+                "roomId", saved.getId(),
+                "roomName", saved.getName(),
+                "inviteCode", saved.getInviteCode()
+        ));
+        return saved;
     }
 
     public Room update(Long id, String name) {
@@ -83,13 +110,19 @@ public class RoomService {
         return roomRepository.save(room);
     }
 
-    public Map<String, String> joinRoom(String inviteCode, String participantId) {
+    public Map<String, String> joinRoom(String inviteCode, String participantId, String displayName) {
         Room room = getByInviteCode(inviteCode);
         if (room.getStatus() == RoomStatus.ENDED) {
             throw new RuntimeException("Room has ended");
         }
-        String token = liveKitService.createParticipantToken(room.getLiveKitRoomName(), participantId);
-        return Map.of("token", token, "url", liveKitPublicUrl);
+        String name = (displayName != null && !displayName.isBlank()) ? displayName : participantId;
+        String token = liveKitService.createParticipantToken(room.getLiveKitRoomName(), participantId, name);
+        return Map.of(
+                "token", token,
+                "url", liveKitPublicUrl,
+                "roomId", String.valueOf(room.getId()),
+                "roomName", room.getName()
+        );
     }
 
     public Room endRoom(Long id) {

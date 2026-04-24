@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { meetingsApi, contactsApi } from '../api'
+import { useAuth } from '../context/AuthContext'
 import TopBar from '../components/TopBar'
 
 export default function Meetings() {
+    const { user } = useAuth()
+    const createdBy = user ? `${user.firstName} ${user.lastName}` : 'admin'
     const [meetings, setMeetings] = useState([])
     const [contacts, setContacts] = useState([])
     const [showModal, setShowModal] = useState(false)
-    const [form, setForm] = useState({ title: '', description: '', scheduledAt: '', createdBy: 'admin', participantIds: [] })
+    const [form, setForm] = useState({ title: '', description: '', scheduledAt: '', participantIds: [] })
 
     const load = () => meetingsApi.getAll().then(r => setMeetings(r.data))
 
@@ -20,16 +23,16 @@ export default function Meetings() {
             title: form.title,
             description: form.description,
             scheduledAt: form.scheduledAt,
-            createdBy: form.createdBy,
+            createdBy,
             participantIds: form.participantIds
         })
         setShowModal(false)
-        setForm({ title: '', description: '', scheduledAt: '', createdBy: 'admin', participantIds: [] })
+        setForm({ title: '', description: '', scheduledAt: '', participantIds: [] })
         load()
     }
 
     const handleStart = async (id) => {
-        const res = await meetingsApi.start(id, { createdBy: 'admin' })
+        const res = await meetingsApi.start(id, { createdBy })
         load()
         const inviteCode = res.data.room?.inviteCode
         if (inviteCode) window.open(`/join/${inviteCode}`, '_blank')

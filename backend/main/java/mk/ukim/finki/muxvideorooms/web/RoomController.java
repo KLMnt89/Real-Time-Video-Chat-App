@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -38,11 +39,12 @@ public class RoomController {
     }
 
     @PostMapping
-    public ResponseEntity<Room> create(@RequestParam @NotBlank String name,
-                                       @RequestParam @NotBlank String createdBy,
-                                       @RequestParam(required = false) List<Long> participantIds) {
+    public ResponseEntity<Map<String, Object>> create(@RequestParam @NotBlank String name,
+                                                      @RequestParam @NotBlank String createdBy,
+                                                      @RequestParam(required = false) String hostIdentity,
+                                                      @RequestParam(required = false) List<Long> participantIds) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(roomService.create(name, createdBy, participantIds));
+                .body(roomService.createWithHostToken(name, createdBy, hostIdentity, participantIds));
     }
 
     @PutMapping("/{id}")
@@ -57,8 +59,9 @@ public class RoomController {
 
     @PostMapping("/join/{inviteCode}")
     public ResponseEntity<Map<String, String>> join(@PathVariable String inviteCode,
-                                                    @RequestParam String participantId) {
-        return ResponseEntity.ok(roomService.joinRoom(inviteCode, participantId));
+                                                    @RequestParam String participantId,
+                                                    @RequestParam(required = false) String displayName) {
+        return ResponseEntity.ok(roomService.joinRoom(inviteCode, participantId, displayName));
     }
 
     @PostMapping("/{id}/end")

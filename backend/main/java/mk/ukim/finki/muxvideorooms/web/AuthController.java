@@ -1,8 +1,10 @@
 package mk.ukim.finki.muxvideorooms.web;
 
 import mk.ukim.finki.muxvideorooms.config.JwtUtil;
+import mk.ukim.finki.muxvideorooms.model.RefreshToken;
 import mk.ukim.finki.muxvideorooms.model.User;
 import mk.ukim.finki.muxvideorooms.model.enums.UserRole;
+import mk.ukim.finki.muxvideorooms.service.RefreshTokenService;
 import mk.ukim.finki.muxvideorooms.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,19 +23,24 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final UserService userService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtUtil jwtUtil,
-                          UserService userService) {
+                          UserService userService,
+                          RefreshTokenService refreshTokenService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     public record RegisterRequest(String firstName, String lastName,
                                   String username, String email, String password) {}
 
     public record LoginRequest(String username, String password) {}
+
+    public record RefreshRequest(String refreshToken) {}
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
@@ -65,9 +72,11 @@ public class AuthController {
                     .body(Map.of("error", "Погрешно корисничко ime или лозинка"));
         }
         User user = userService.getByUsername(req.username());
-        String token = jwtUtil.generateToken(req.username());
+        String accessToken = jwtUtil.generateToken(req.username());
+        RefreshToken refreshToken = refreshTokenService.create(user);
         return ResponseEntity.ok(Map.of(
-                "token", token,
+                "token", accessToken,
+                "refreshToken", refreshToken.getToken(),
                 "id", user.getId(),
                 "username", user.getUsername(),
                 "firstName", user.getFirstName(),
@@ -75,5 +84,28 @@ public class AuthController {
                 "email", user.getEmail(),
                 "role", user.getRole().name()
         ));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody RefreshRequest req) {
+        return refreshTokenService.findByToken(req.refreshToken())
+                .map(rt -> {
+                    if (refreshTokenService.isExpired(rt)) {
+                        refreshTokenService.deleteByUser(rt.getUser());
+                        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(Map.of("error", "Refresh token expired"));
+                    }
+                    String newAccessToken = jwtUtil.generateToken(rt.getUser().getUsername());
+                    return ResponseEntity.ok(Map.of("token", newAccessToken));
+                })
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Invalid refresh token")));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody RefreshRequest req) {
+        refreshTokenService.findByToken(req.refreshToken())
+                .ifPresent(rt -> refreshTokenService.deleteByUser(rt.getUser()));
+        return ResponseEntity.ok(Map.of("message", "Logged out"));
     }
 }

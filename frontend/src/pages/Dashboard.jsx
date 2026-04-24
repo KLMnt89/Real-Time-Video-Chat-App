@@ -1,7 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { meetingsApi, contactsApi, roomsApi } from '../api'
 import { useAuth } from '../context/AuthContext'
 import TopBar from '../components/TopBar'
+
+function Toast({ toasts }) {
+    return (
+        <div style={{
+            position: 'fixed', bottom: 24, right: 24,
+            display: 'flex', flexDirection: 'column', gap: 8, zIndex: 1000,
+            pointerEvents: 'none'
+        }}>
+            {toasts.map(t => (
+                <div key={t.id} style={{
+                    background: '#1a1a2e', color: 'white',
+                    padding: '10px 16px', borderRadius: 10,
+                    fontSize: 13, boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                    border: '0.5px solid rgba(255,255,255,0.1)',
+                    animation: 'slideIn 0.2s ease'
+                }}>
+                    {t.message}
+                </div>
+            ))}
+        </div>
+    )
+}
 
 export default function Dashboard() {
     const { user } = useAuth()
@@ -15,6 +37,13 @@ export default function Dashboard() {
     const [fetchLoading, setFetchLoading]     = useState(true)
     const [fetchError, setFetchError]         = useState(null)
     const [genError, setGenError]             = useState(null)
+    const [toasts, setToasts]                 = useState([])
+
+    const addToast = useCallback((message) => {
+        const id = Date.now()
+        setToasts(t => [...t, { id, message }])
+        setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000)
+    }, [])
 
     useEffect(() => {
         setFetchLoading(true)
@@ -30,6 +59,30 @@ export default function Dashboard() {
           .finally(() => setFetchLoading(false))
     }, [])
 
+    useEffect(() => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        const es = new EventSource(`/api/sse/subscribe?token=${token}`)
+        es.addEventListener('room.created', (e) => {
+            try {
+                const data = JSON.parse(e.data)
+                addToast(`Нова соба: ${data.roomName}`)
+            } catch {}
+            roomsApi.getActive().then(r => setActiveRooms(r.data)).catch(() => {})
+        })
+        es.addEventListener('meeting.started', (e) => {
+            try {
+                const data = JSON.parse(e.data)
+                const titles = data.titles?.join(', ') || 'состанок'
+                addToast(`Состанокот "${titles}" започна`)
+            } catch {}
+            Promise.all([meetingsApi.getToday(), roomsApi.getActive()])
+                .then(([m, r]) => { setTodayMeetings(m.data); setActiveRooms(r.data) })
+                .catch(() => {})
+        })
+        return () => es.close()
+    }, [addToast])
+
     const generateLink = async () => {
         setLoading(true)
         try {
@@ -38,7 +91,8 @@ export default function Dashboard() {
             const mm = String(now.getMinutes()).padStart(2, '0')
             const res = await roomsApi.create({
                 name: `Соба ${hh}:${mm}`,
-                createdBy: user ? `${user.firstName} ${user.lastName}` : 'admin'
+                createdBy: user ? `${user.firstName} ${user.lastName}` : 'admin',
+                hostIdentity: user?.username || 'admin'
             })
             const room = res.data
             const link = `${window.location.origin}/join/${room.inviteCode}`
@@ -46,6 +100,13 @@ export default function Dashboard() {
             setGeneratedRoom(room)
             setCopied(false)
             roomsApi.getActive().then(r => setActiveRooms(r.data))
+            // Store host token so the new tab joins directly without the guest flow
+            localStorage.setItem(`huddle_host_${room.inviteCode}`, JSON.stringify({
+                token: room.token,
+                url: room.url,
+                roomId: room.id,
+                name: user ? `${user.firstName} ${user.lastName}` : 'Host'
+            }))
             window.open(link, '_blank')
         } catch (e) {
             setGenError('Грешка при креирање соба. Проверете дали серверот е активен.')
@@ -87,6 +148,8 @@ export default function Dashboard() {
 
     return (
         <div className="main-content">
+            <style>{`@keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }`}</style>
+            <Toast toasts={toasts} />
             <TopBar title="Dashboard" action={
                 <button className="btn btn-primary" onClick={generateLink} disabled={loading}>
                     {loading ? 'Креирање...' : '+ Нов состанок'}

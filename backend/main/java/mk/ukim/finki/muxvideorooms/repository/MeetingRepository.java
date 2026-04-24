@@ -20,6 +20,9 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @EntityGraph(attributePaths = {"participants", "room"})
     List<Meeting> findByScheduledAtBetween(LocalDateTime from, LocalDateTime to);
 
+    @EntityGraph(attributePaths = {"participants", "room"})
+    List<Meeting> findByStatusAndScheduledAtBetween(MeetingStatus status, LocalDateTime from, LocalDateTime to);
+
     List<Meeting> findByCreatedBy(String createdBy);
     List<Meeting> findByParticipants_Id(Long contactId);
 }

@@ -32,6 +32,10 @@ public class LiveKitService {
     }
 
     public String createParticipantToken(String roomName, String participantIdentity) {
+        return createParticipantToken(roomName, participantIdentity, participantIdentity);
+    }
+
+    public String createParticipantToken(String roomName, String identity, String displayName) {
         SecretKey key = Keys.hmacShaKeyFor(apiSecret.getBytes(StandardCharsets.UTF_8));
 
         Map<String, Object> videoClaims = Map.of(
@@ -43,9 +47,9 @@ public class LiveKitService {
 
         return Jwts.builder()
                 .issuer(apiKey)
-                .subject(participantIdentity)
+                .subject(identity)
                 .claim("video", videoClaims)
-                .claim("name", participantIdentity)
+                .claim("name", displayName)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 3_600_000))
                 .signWith(key)

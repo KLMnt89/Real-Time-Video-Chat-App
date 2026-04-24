@@ -30,3 +30,6 @@ pgdata/
 # Claude AI assistant files
 .claude/
 claude.md
+
+
+TASKS.md

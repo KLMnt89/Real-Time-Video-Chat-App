@@ -8,9 +8,41 @@ api.interceptors.request.use(config => {
     return config
 })
 
+api.interceptors.response.use(
+    res => res,
+    async err => {
+        const original = err.config
+        if (err.response?.status === 401 && !original._retry) {
+            original._retry = true
+            const refreshToken = localStorage.getItem('refreshToken')
+            if (!refreshToken) {
+                // Only force-logout if the user actually had a session
+                if (localStorage.getItem('user')) {
+                    localStorage.clear()
+                    window.location.href = '/login'
+                }
+                return Promise.reject(err)
+            }
+            try {
+                const res = await axios.post('/api/auth/refresh', { refreshToken })
+                const newToken = res.data.token
+                localStorage.setItem('token', newToken)
+                original.headers['Authorization'] = `Bearer ${newToken}`
+                return api(original)
+            } catch {
+                localStorage.clear()
+                window.location.href = '/login'
+                return Promise.reject(err)
+            }
+        }
+        return Promise.reject(err)
+    }
+)
+
 export const authApi = {
     register: (data) => api.post('/auth/register', data),
     login:    (data) => api.post('/auth/login', data),
+    logout:   ()     => api.post('/auth/logout', { refreshToken: localStorage.getItem('refreshToken') }),
 }
 
 export const usersApi = {
@@ -46,8 +78,20 @@ export const roomsApi = {
     create:    (params) => api.post('/rooms', null, { params }),
     end:       (id)   => api.post(`/rooms/${id}/end`),
     delete:    (id)   => api.delete(`/rooms/${id}`),
-    join:      (inviteCode, participantId) =>
-        api.post(`/rooms/join/${inviteCode}`, null, { params: { participantId } })
+    join:      (inviteCode, participantId, displayName) =>
+        api.post(`/rooms/join/${inviteCode}`, null, { params: { participantId, displayName } })
+}
+
+export const chatApi = {
+    getMessages: (roomId) => api.get(`/rooms/${roomId}/chat`),
+    sendMessage: (roomId, sender, content) =>
+        api.post(`/rooms/${roomId}/chat`, null, { params: { sender, content } }),
+}
+
+export const roomNoteApi = {
+    getNote:  (roomId)                      => api.get(`/rooms/${roomId}/note`),
+    saveNote: (roomId, content, updatedBy)  =>
+        api.put(`/rooms/${roomId}/note`, null, { params: { content, updatedBy } }),
 }
 
 export const notesApi = {

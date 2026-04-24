@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { authApi } from '../api'
 import { useAuth } from '../context/AuthContext'
 
@@ -10,6 +10,8 @@ export default function Login() {
     const [loading, setLoading]   = useState(false)
     const { login } = useAuth()
     const navigate  = useNavigate()
+    const [searchParams] = useSearchParams()
+    const redirectTo = searchParams.get('redirect') || '/'
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -18,9 +20,9 @@ export default function Login() {
         setError(null)
         try {
             const res = await authApi.login({ username, password })
-            const { token, ...userData } = res.data
-            login(userData, token)
-            navigate('/')
+            const { token, refreshToken, ...userData } = res.data
+            login(userData, token, refreshToken)
+            navigate(redirectTo, { replace: true })
         } catch (err) {
             setError(err.response?.data?.error || 'Погрешно корисничко ime или лозинка')
         } finally {

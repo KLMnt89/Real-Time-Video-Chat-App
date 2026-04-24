@@ -34,8 +34,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
+            // fallback: allow token via query param for EventSource (SSE) which can't set headers
+            String tokenParam = request.getParameter("token");
+            if (tokenParam != null && !tokenParam.isBlank()) {
+                authHeader = "Bearer " + tokenParam;
+            } else {
+                filterChain.doFilter(request, response);
+                return;
+            }
         }
 
         String token = authHeader.substring(7);

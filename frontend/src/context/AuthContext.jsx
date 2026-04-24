@@ -10,14 +10,24 @@ export function AuthProvider({ children }) {
         } catch { return null }
     })
 
-    const login = (userData, token) => {
+    const login = (userData, token, refreshToken) => {
         localStorage.setItem('token', token)
+        localStorage.setItem('refreshToken', refreshToken)
         localStorage.setItem('user', JSON.stringify(userData))
         setUser(userData)
     }
 
     const logout = () => {
+        const refreshToken = localStorage.getItem('refreshToken')
+        if (refreshToken) {
+            fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken })
+            }).catch(() => {})
+        }
         localStorage.removeItem('token')
+        localStorage.removeItem('refreshToken')
         localStorage.removeItem('user')
         setUser(null)
     }

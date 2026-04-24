@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -98,6 +99,18 @@ public class MeetingService {
         meeting.setDescription(description);
         meeting.setScheduledAt(scheduledAt);
         return meetingRepository.save(meeting);
+    }
+
+    public List<Meeting> startDue() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Meeting> due = meetingRepository.findByStatusAndScheduledAtBetween(
+                MeetingStatus.SCHEDULED, now.minusMinutes(2), now.plusSeconds(30));
+        for (Meeting m : due) {
+            List<Long> participantIds = m.getParticipants().stream()
+                    .map(c -> c.getId()).collect(Collectors.toList());
+            start(m.getId(), m.getCreatedBy(), participantIds);
+        }
+        return due;
     }
 
     public void delete(Long id) {

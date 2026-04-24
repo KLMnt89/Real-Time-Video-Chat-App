@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { meetingsApi, notesApi } from '../api'
+import { useAuth } from '../context/AuthContext'
 import TopBar from '../components/TopBar'
 
 export default function Notes() {
+    const { user } = useAuth()
+    const writtenBy = user ? `${user.firstName} ${user.lastName}` : 'admin'
     const [meetings, setMeetings] = useState([])
     const [selected, setSelected] = useState(null)
     const [notes, setNotes] = useState([])
@@ -19,7 +22,7 @@ export default function Notes() {
 
     const handleAdd = async () => {
         if (!content.trim()) return
-        await notesApi.create(selected.id, { content, writtenBy: 'admin' })
+        await notesApi.create(selected.id, { content, writtenBy })
         setContent('')
         notesApi.getByMeeting(selected.id).then(r => setNotes(r.data))
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { roomsApi, notesApi, meetingsApi } from '../api'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { roomsApi, chatApi, roomNoteApi } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Room, RoomEvent, Track } from 'livekit-client'
 
@@ -27,57 +27,6 @@ function Toast({ toasts }) {
     )
 }
 
-/* ─── Login screen ───────────────────────────────────────── */
-function JoinScreen({ inviteCode, onJoin, loading, error }) {
-    const [name, setName] = useState('')
-    return (
-        <div style={{
-            minHeight: '100vh', background: '#f4f6f9',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-            <div style={{
-                background: 'white', borderRadius: 16, padding: 36,
-                width: 420, boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
-            }}>
-                <div style={{ marginBottom: 24, textAlign: 'center' }}>
-                    <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 6 }}>
-                        <span style={{ color: '#185FA5' }}>hud</span>dle
-                    </div>
-                    <div style={{ fontSize: 14, color: '#9ca3af' }}>Приклучи се на состанокот</div>
-                </div>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8, fontFamily: 'monospace' }}>
-                    {inviteCode}
-                </div>
-                <input
-                    placeholder="Твоето ime"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && onJoin(name)}
-                    autoFocus
-                />
-                {error && (
-                    <div style={{
-                        background: '#FCEBEB', color: '#A32D2D',
-                        borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 12
-                    }}>
-                        {error}
-                    </div>
-                )}
-                <button
-                    onClick={() => onJoin(name)}
-                    disabled={loading || !name.trim()}
-                    style={{
-                        width: '100%', padding: 11,
-                        background: loading || !name.trim() ? '#9ca3af' : '#185FA5',
-                        color: 'white', border: 'none', borderRadius: 8,
-                        fontSize: 14, cursor: loading || !name.trim() ? 'not-allowed' : 'pointer'
-                    }}>
-                    {loading ? 'Поврзување...' : 'Приклучи се'}
-                </button>
-            </div>
-        </div>
-    )
-}
 
 /* ─── Post-call screen ───────────────────────────────────── */
 function PostCallScreen({ inviteCode, onRejoin }) {
@@ -149,34 +98,48 @@ export default function JoinRoom() {
     const { inviteCode } = useParams()
     const { user } = useAuth()
     const [session, setSession] = useState(null)
-    const [loading, setLoading] = useState(false)
     const [error, setError]     = useState(null)
     const [left, setLeft]       = useState(false)
 
     const displayName = user ? `${user.firstName} ${user.lastName}` : null
+    const identity    = user?.username || displayName
 
-    const doJoin = async (name) => {
+    const doJoin = useCallback(async (name) => {
         if (!name?.trim()) return
-        setLoading(true)
         setError(null)
         try {
-            const res = await roomsApi.join(inviteCode, name)
-            setSession({ token: res.data.token, url: res.data.url, name })
+            const res = await roomsApi.join(inviteCode, identity, name)
+            setSession({ token: res.data.token, url: res.data.url, name, roomId: res.data.roomId })
         } catch {
             setError('Не може да се приклучи — собата можеби не постои или е завршена.')
-        } finally {
-            setLoading(false)
         }
-    }
+    }, [inviteCode, identity])
 
     useEffect(() => {
-        if (displayName) doJoin(displayName)
-    }, [])
+        if (!user) return
+        // If this tab was opened by the host, use the pre-stored token directly
+        const hostKey = `huddle_host_${inviteCode}`
+        const raw = localStorage.getItem(hostKey)
+        if (raw) {
+            try {
+                const { token, url, roomId, name } = JSON.parse(raw)
+                localStorage.removeItem(hostKey)
+                setSession({ token, url, name, roomId })
+                return
+            } catch {}
+        }
+        doJoin(displayName)
+    }, [user])
+
+    // Redirect unauthenticated users to login, then back here
+    if (!user) {
+        return <Navigate to={`/login?redirect=/join/${inviteCode}`} replace />
+    }
 
     if (left) return <PostCallScreen inviteCode={inviteCode} onRejoin={() => {
         setLeft(false)
         setSession(null)
-        if (displayName) doJoin(displayName)
+        doJoin(displayName)
     }} />
 
     if (session) return (
@@ -184,41 +147,42 @@ export default function JoinRoom() {
             token={session.token}
             url={session.url}
             name={session.name}
+            roomId={session.roomId}
             inviteCode={inviteCode}
             onLeave={() => setLeft(true)}
         />
     )
 
-    if (displayName) {
-        return (
-            <div style={{
-                minHeight: '100vh', background: '#f4f6f9',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-                {error ? (
-                    <div style={{
-                        background: 'white', borderRadius: 16, padding: 32,
-                        width: 380, textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
-                    }}>
-                        <div style={{ color: '#A32D2D', marginBottom: 16 }}>{error}</div>
-                        <button onClick={() => doJoin(displayName)} className="btn btn-primary">
-                            Обиди се повторно
-                        </button>
+    return (
+        <div style={{
+            minHeight: '100vh', background: '#f4f6f9',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+            {error ? (
+                <div style={{
+                    background: 'white', borderRadius: 16, padding: 32,
+                    width: 380, textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                }}>
+                    <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
+                        <span style={{ color: '#185FA5' }}>hud</span>dle
                     </div>
-                ) : (
-                    <div style={{ color: '#6b7280', fontSize: 14 }}>Поврзување...</div>
-                )}
-            </div>
-        )
-    }
-
-    return <JoinScreen inviteCode={inviteCode} onJoin={doJoin} loading={loading} error={error} />
+                    <div style={{ color: '#A32D2D', marginBottom: 16 }}>{error}</div>
+                    <button onClick={() => doJoin(displayName)} className="btn btn-primary">
+                        Обиди се повторно
+                    </button>
+                </div>
+            ) : (
+                <div style={{ color: '#6b7280', fontSize: 14 }}>Поврзување...</div>
+            )}
+        </div>
+    )
 }
 
 /* ─── VideoRoom ──────────────────────────────────────────── */
-function VideoRoom({ token, url, name, inviteCode, onLeave }) {
+function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
     const localVideoRef = useRef(null)
     const roomRef       = useRef(null)
+    const chatEndRef    = useRef(null)
 
     const [muted, setMuted]           = useState(false)
     const [camOff, setCamOff]         = useState(false)
@@ -230,9 +194,12 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
     const [participants, setParticipants] = useState([])
     const [remoteParticipants, setRemoteParticipants] = useState([])
     const [rightTab, setRightTab]     = useState('participants')
+    const [chatMessages, setChatMessages] = useState([])
+    const [chatInput, setChatInput]   = useState('')
     const [noteText, setNoteText]     = useState('')
     const [noteSaved, setNoteSaved]   = useState(false)
     const remotesDivRef = useRef(null)
+    const noteDebounceRef = useRef(null)
 
     const addToast = useCallback((message) => {
         const id = Date.now()
@@ -313,18 +280,49 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
             setJoined(false)
         })
 
+        lkRoom.on(RoomEvent.DataReceived, (payload) => {
+            try {
+                const msg = JSON.parse(new TextDecoder().decode(payload))
+                if (msg.type === 'chat') {
+                    setChatMessages(prev => [...prev, msg])
+                } else if (msg.type === 'note') {
+                    setNoteText(msg.content)
+                }
+            } catch {}
+        })
+
         const connect = async () => {
+            // Step 1: connect to LiveKit signal server — fatal if this fails
             try {
                 await lkRoom.connect(url, token)
-                setJoined(true)
-                syncParticipants(lkRoom)
+            } catch (e) {
+                setError('Could not connect to the room: ' + e.message)
+                return
+            }
+            setJoined(true)
+            syncParticipants(lkRoom)
+
+            // Step 2: acquire camera + mic — non-fatal (permission may be denied in incognito)
+            try {
                 await lkRoom.localParticipant.enableCameraAndMicrophone()
                 const camPub = lkRoom.localParticipant.getTrackPublication(Track.Source.Camera)
                 if (camPub?.track && localVideoRef.current) {
                     camPub.track.attach(localVideoRef.current)
                 }
-            } catch (e) {
-                setError('Не може да се поврзе: ' + e.message)
+            } catch {
+                addToast('Camera / microphone not available — joined in listen-only mode')
+                setCamOff(true)
+                setMuted(true)
+            }
+
+            // Step 3: load persisted chat + notes
+            if (roomId) {
+                chatApi.getMessages(roomId).then(r => setChatMessages(
+                    r.data.map(m => ({ type: 'chat', sender: m.sender, content: m.content, sentAt: m.sentAt }))
+                )).catch(() => {})
+                roomNoteApi.getNote(roomId).then(r => {
+                    if (r.data?.content) setNoteText(r.data.content)
+                }).catch(() => {})
             }
         }
 
@@ -340,9 +338,49 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
     }
 
     const toggleCam = async () => {
-        const enabled = camOff
-        await roomRef.current?.localParticipant.setCameraEnabled(enabled)
-        setCamOff(!enabled)
+        const room = roomRef.current
+        if (!room) return
+        if (camOff) {
+            const pub = await room.localParticipant.setCameraEnabled(true)
+            if (pub?.track && localVideoRef.current) {
+                pub.track.attach(localVideoRef.current)
+            }
+            setCamOff(false)
+        } else {
+            await room.localParticipant.setCameraEnabled(false)
+            setCamOff(true)
+        }
+    }
+
+    const sendChat = async () => {
+        const content = chatInput.trim()
+        if (!content || !roomRef.current) return
+        const msg = { type: 'chat', sender: name, content, sentAt: new Date().toISOString() }
+        const data = new TextEncoder().encode(JSON.stringify(msg))
+        await roomRef.current.localParticipant.publishData(data, { reliable: true })
+        setChatMessages(prev => [...prev, msg])
+        setChatInput('')
+        if (roomId) chatApi.sendMessage(roomId, name, content).catch(() => {})
+    }
+
+    const broadcastNote = (content) => {
+        if (!roomRef.current) return
+        const msg = { type: 'note', content, updatedBy: name }
+        const data = new TextEncoder().encode(JSON.stringify(msg))
+        roomRef.current.localParticipant.publishData(data, { reliable: true }).catch(() => {})
+    }
+
+    const handleNoteChange = (val) => {
+        setNoteText(val)
+        clearTimeout(noteDebounceRef.current)
+        noteDebounceRef.current = setTimeout(() => broadcastNote(val), 500)
+    }
+
+    const saveNote = async () => {
+        if (!roomId) return
+        await roomNoteApi.saveNote(roomId, noteText, name).catch(() => {})
+        setNoteSaved(true)
+        setTimeout(() => setNoteSaved(false), 2000)
     }
 
     const toggleScreen = async () => {
@@ -354,6 +392,10 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
             setScreenSharing(false)
         }
     }
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [chatMessages])
 
     const remoteCount = remoteParticipants.length
     const gridStyle = remoteCount === 1
@@ -442,17 +484,64 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
                 }}>
                     {/* Tabs */}
                     <div style={{ display: 'flex', borderBottom: '0.5px solid rgba(255,255,255,0.07)' }}>
-                        {['participants', 'notes'].map(tab => (
+                        {['chat', 'participants', 'notes'].map(tab => (
                             <button key={tab} onClick={() => setRightTab(tab)} style={{
-                                flex: 1, padding: '12px 0', background: 'transparent', border: 'none',
+                                flex: 1, padding: '10px 0', background: 'transparent', border: 'none',
                                 color: rightTab === tab ? '#378ADD' : 'rgba(255,255,255,0.4)',
-                                fontSize: 12, fontWeight: rightTab === tab ? 600 : 400,
+                                fontSize: 11, fontWeight: rightTab === tab ? 600 : 400,
                                 cursor: 'pointer', borderBottom: rightTab === tab ? '2px solid #378ADD' : '2px solid transparent'
                             }}>
-                                {tab === 'participants' ? 'Учесници' : 'Белешки'}
+                                {tab === 'chat' ? 'Чет' : tab === 'participants' ? 'Учесници' : 'Белешки'}
                             </button>
                         ))}
                     </div>
+
+                    {/* Chat tab */}
+                    {rightTab === 'chat' && (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {chatMessages.length === 0 && (
+                                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: 20 }}>
+                                        Нема пораки уште
+                                    </div>
+                                )}
+                                {chatMessages.map((m, i) => (
+                                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.sender === name ? 'flex-end' : 'flex-start' }}>
+                                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>
+                                            {m.sender === name ? 'Ти' : m.sender}
+                                        </div>
+                                        <div style={{
+                                            background: m.sender === name ? '#185FA5' : 'rgba(255,255,255,0.1)',
+                                            color: 'white', borderRadius: m.sender === name ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                                            padding: '7px 10px', fontSize: 12, maxWidth: '85%', wordBreak: 'break-word'
+                                        }}>
+                                            {m.content}
+                                        </div>
+                                    </div>
+                                ))}
+                                <div ref={chatEndRef} />
+                            </div>
+                            <div style={{ padding: '8px 10px', borderTop: '0.5px solid rgba(255,255,255,0.07)', display: 'flex', gap: 6 }}>
+                                <input
+                                    value={chatInput}
+                                    onChange={e => setChatInput(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendChat()}
+                                    placeholder="Напиши порака..."
+                                    style={{
+                                        flex: 1, background: 'rgba(255,255,255,0.08)',
+                                        border: '0.5px solid rgba(255,255,255,0.12)',
+                                        borderRadius: 8, color: 'white', fontSize: 12, padding: '7px 10px',
+                                        outline: 'none'
+                                    }}
+                                />
+                                <button onClick={sendChat} disabled={!chatInput.trim()} style={{
+                                    padding: '7px 12px', background: chatInput.trim() ? '#185FA5' : 'rgba(255,255,255,0.06)',
+                                    border: 'none', borderRadius: 8, color: 'white', fontSize: 12,
+                                    cursor: chatInput.trim() ? 'pointer' : 'not-allowed'
+                                }}>→</button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Participants tab */}
                     {rightTab === 'participants' && (
@@ -484,16 +573,16 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
                         </div>
                     )}
 
-                    {/* Notes tab */}
+                    {/* Notes tab (collaborative) */}
                     {rightTab === 'notes' && (
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, gap: 8 }}>
                             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-                                Белешки за состанокот
+                                Заеднички белешки · синхронизирани во живо
                             </div>
                             <textarea
                                 value={noteText}
-                                onChange={e => setNoteText(e.target.value)}
-                                placeholder="Запишете белешки тука..."
+                                onChange={e => handleNoteChange(e.target.value)}
+                                placeholder="Запишете белешки тука — сите учесници ги гледаат во живо..."
                                 style={{
                                     flex: 1, background: 'rgba(255,255,255,0.06)',
                                     border: '0.5px solid rgba(255,255,255,0.1)',
@@ -503,11 +592,7 @@ function VideoRoom({ token, url, name, inviteCode, onLeave }) {
                                 }}
                             />
                             <button
-                                onClick={() => {
-                                    localStorage.setItem(`note-${inviteCode}`, noteText)
-                                    setNoteSaved(true)
-                                    setTimeout(() => setNoteSaved(false), 2000)
-                                }}
+                                onClick={saveNote}
                                 style={{
                                     padding: '8px 0', background: '#185FA5',
                                     color: 'white', border: 'none', borderRadius: 8,
