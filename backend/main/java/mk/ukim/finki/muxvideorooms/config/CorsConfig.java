@@ -15,6 +15,8 @@ public class CorsConfig {
         config.addAllowedOrigin("http://localhost:5173");
         config.addAllowedOrigin("http://localhost");
         config.addAllowedOrigin("http://localhost:80");
+        // TODO: insert your ngrok url here:
+        config.addAllowedOrigin("https://unaired-tackiness-deviant.ngrok-free.dev");
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

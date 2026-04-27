@@ -21,23 +21,6 @@ services:
       retries: 10
       start_period: 10s
 
-  livekit:
-    image: livekit/livekit-server:latest
-    container_name: livekit-server
-    command: --config /etc/livekit.yaml
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7880 2>/dev/null; exit 0"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   backend:
     build:
       context: .
@@ -50,16 +33,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      LIVEKIT_URL: ws://livekit:7880
-      LIVEKIT_PUBLIC_URL: ws://localhost:7880
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       SPRING_FLYWAY_ENABLED: "false"
     depends_on:
       postgres:
         condition: service_healthy
-      livekit:
-        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q 'UP' || exit 1"]
       interval: 10s
