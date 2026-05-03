@@ -5,7 +5,7 @@ import ConfirmModal from '../components/ConfirmModal'
 
 export default function Rooms() {
     const [rooms,    setRooms]    = useState([])
-    const [filter,   setFilter]   = useState('ALL')
+    const [filter,   setFilter]   = useState('ACTIVE')
     const [copiedId, setCopiedId] = useState(null)
     const [confirm,  setConfirm]  = useState(null)
 

@@ -134,7 +134,7 @@ export default function JoinRoom() {
         setError(null)
         try {
             const res = await roomsApi.join(inviteCode, identity, name)
-            setSession({ token: res.data.token, url: res.data.url, name, roomId: res.data.roomId })
+            setSession({ token: res.data.token, url: res.data.url, name, roomId: res.data.roomId, roomName: res.data.roomName })
         } catch (err) {
             if (err.response?.status === 410) {
                 setExpired(true)
@@ -150,9 +150,9 @@ export default function JoinRoom() {
         const raw = localStorage.getItem(hostKey)
         if (raw) {
             try {
-                const { token, url, roomId, name } = JSON.parse(raw)
+                const { token, url, roomId, name, roomName } = JSON.parse(raw)
                 localStorage.removeItem(hostKey)
-                setSession({ token, url, name, roomId })
+                setSession({ token, url, name, roomId, roomName })
                 return
             } catch {}
         }
@@ -177,6 +177,7 @@ export default function JoinRoom() {
             url={session.url}
             name={session.name}
             roomId={session.roomId}
+            roomName={session.roomName}
             inviteCode={inviteCode}
             onLeave={() => setLeft(true)}
         />
@@ -208,7 +209,7 @@ export default function JoinRoom() {
 }
 
 /* ─── VideoRoom ──────────────────────────────────────────── */
-function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
+function VideoRoom({ token, url, name, roomId, roomName, inviteCode, onLeave }) {
     const localVideoRef = useRef(null)
     const roomRef       = useRef(null)
     const chatEndRef    = useRef(null)
@@ -416,7 +417,8 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
         a.href     = url
-        a.download = `notes-${inviteCode?.slice(0, 8) || 'room'}.txt`
+        const safeName = (roomName || inviteCode?.slice(0, 8) || 'room').replace(/[^a-z0-9 _-]/gi, '_')
+        a.download = `notes-${safeName}.txt`
         a.click()
         URL.revokeObjectURL(url)
     }

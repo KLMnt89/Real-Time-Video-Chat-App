@@ -241,12 +241,16 @@ export default function Dashboard() {
             setGeneratedRoom(room)
             roomsApi.getActive().then(r => setActiveRooms(r.data))
             localStorage.setItem(`huddle_host_${room.inviteCode}`, JSON.stringify({
-                token: room.token, url: room.url, roomId: room.id,
+                token: room.token, url: room.url, roomId: room.id, roomName: room.name,
                 name:  user ? `${user.firstName} ${user.lastName}` : 'Host'
             }))
             window.open(link, '_blank')
-        } catch {
-            addToast('Error creating room. Check if the server is running.')
+        } catch (err) {
+            if (err.response?.status === 429) {
+                addToast('Rate limit reached — max 10 rooms per hour.')
+            } else {
+                addToast('Error creating room. Check if the server is running.')
+            }
         } finally {
             setLoading(false)
         }
