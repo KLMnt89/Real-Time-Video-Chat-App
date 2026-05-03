@@ -1,6 +1,7 @@
 package mk.ukim.finki.muxvideorooms.service;
 
 import mk.ukim.finki.muxvideorooms.model.Meeting;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -11,11 +12,16 @@ import java.util.Map;
 public class MeetingScheduler {
 
     private final MeetingService meetingService;
+    private final RoomService roomService;
     private final SseService sseService;
 
-    public MeetingScheduler(MeetingService meetingService, SseService sseService) {
+    @Value("${room.auto-close.minutes:120}")
+    private int roomAutoCloseMinutes;
+
+    public MeetingScheduler(MeetingService meetingService, RoomService roomService, SseService sseService) {
         this.meetingService = meetingService;
-        this.sseService = sseService;
+        this.roomService    = roomService;
+        this.sseService     = sseService;
     }
 
     @Scheduled(fixedDelay = 60_000)
@@ -27,5 +33,10 @@ public class MeetingScheduler {
                     "titles", started.stream().map(Meeting::getTitle).toList()
             ));
         }
+    }
+
+    @Scheduled(fixedDelay = 300_000)
+    public void autoCloseStaleRooms() {
+        roomService.endStaleRooms(roomAutoCloseMinutes);
     }
 }

@@ -2,14 +2,14 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const links = [
-    { group: 'ГЛАВНО', items: [
+    { group: 'MAIN', items: [
         { to: '/',         label: 'Dashboard' },
-        { to: '/meetings', label: 'Состаноци' },
-        { to: '/rooms',    label: 'Соби' },
+        { to: '/meetings', label: 'Meetings' },
+        { to: '/rooms',    label: 'Rooms' },
     ]},
-    { group: 'УПРАВУВАЊЕ', items: [
-        { to: '/contacts', label: 'Контакти' },
-        { to: '/notes',    label: 'Записници' },
+    { group: 'MANAGE', items: [
+        { to: '/contacts', label: 'Contacts' },
+        { to: '/notes',    label: 'Notes' },
     ]}
 ]
 
@@ -86,7 +86,7 @@ export default function Sidebar() {
                                     {user?.firstName} {user?.lastName}
                                 </div>
                                 <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                                    {user?.role === 'ROLE_ADMIN' ? 'Admin' : 'Корисник'}
+                                    {user?.role === 'ROLE_ADMIN' ? 'Admin' : 'User'}
                                 </div>
                             </div>
                         </div>
@@ -100,7 +100,7 @@ export default function Sidebar() {
                         borderRadius: 8, fontSize: 12, color: '#9ca3af',
                         cursor: 'pointer', textAlign: 'left'
                     }}>
-                    Одјави се
+                    Sign out
                 </button>
             </div>
         </aside>

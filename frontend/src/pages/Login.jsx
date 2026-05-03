@@ -24,7 +24,7 @@ export default function Login() {
             login(userData, token, refreshToken)
             navigate(redirectTo, { replace: true })
         } catch (err) {
-            setError(err.response?.data?.error || 'Погрешно корисничко ime или лозинка')
+            setError(err.response?.data?.error || 'Invalid username or password')
         } finally {
             setLoading(false)
         }
@@ -43,13 +43,13 @@ export default function Login() {
                     <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 6 }}>
                         <span style={{ color: '#185FA5' }}>hud</span>dle
                     </div>
-                    <div style={{ fontSize: 13, color: '#9ca3af' }}>Најавете се на вашиот акаунт</div>
+                    <div style={{ fontSize: 13, color: '#9ca3af' }}>Sign in to your account</div>
                 </div>
 
                 <form onSubmit={handleSubmit}>
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>
-                            Корисничко ime
+                            Username
                         </label>
                         <input
                             value={username}
@@ -62,7 +62,7 @@ export default function Login() {
 
                     <div style={{ marginBottom: 20 }}>
                         <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>
-                            Лозинка
+                            Password
                         </label>
                         <input
                             type="password"
@@ -92,14 +92,14 @@ export default function Login() {
                             fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer',
                             fontWeight: 500
                         }}>
-                        {loading ? 'Најавување...' : 'Најави се'}
+                        {loading ? 'Signing in...' : 'Sign in'}
                     </button>
                 </form>
 
                 <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#9ca3af' }}>
-                    Немате акаунт?{' '}
+                    Don't have an account?{' '}
                     <Link to="/register" style={{ color: '#185FA5', textDecoration: 'none', fontWeight: 500 }}>
-                        Регистрирај се
+                        Register
                     </Link>
                 </div>
             </div>

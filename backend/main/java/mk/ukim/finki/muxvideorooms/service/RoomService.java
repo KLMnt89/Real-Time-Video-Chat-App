@@ -9,6 +9,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -23,18 +26,21 @@ public class RoomService {
     private final ContactRepository contactRepository;
     private final LiveKitService liveKitService;
     private final SseService sseService;
+    private final RoomParticipantLogService participantLogService;
 
-    @Value("${livekit.public-url:ws://localhost:7880}")
+    @Value("${livekit.public-url:wss://videochatapp-jbc6g95h.livekit.cloud}")
     private String liveKitPublicUrl;
 
     public RoomService(RoomRepository roomRepository,
                        ContactRepository contactRepository,
                        LiveKitService liveKitService,
-                       SseService sseService) {
-        this.roomRepository = roomRepository;
-        this.contactRepository = contactRepository;
-        this.liveKitService = liveKitService;
-        this.sseService = sseService;
+                       SseService sseService,
+                       RoomParticipantLogService participantLogService) {
+        this.roomRepository       = roomRepository;
+        this.contactRepository    = contactRepository;
+        this.liveKitService       = liveKitService;
+        this.sseService           = sseService;
+        this.participantLogService = participantLogService;
     }
 
     public List<Room> getAll() {
@@ -56,6 +62,10 @@ public class RoomService {
     }
 
     public Map<String, Object> createWithHostToken(String name, String createdBy, String hostIdentity, List<Long> participantIds) {
+        long recentCount = roomRepository.countByCreatedByAndCreatedAtAfter(createdBy, LocalDateTime.now().minusHours(1));
+        if (recentCount >= 10) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Rate limit exceeded: max 10 rooms per hour");
+        }
         Room room = create(name, createdBy, participantIds);
         String identity = (hostIdentity != null && !hostIdentity.isBlank()) ? hostIdentity : createdBy;
         String token = liveKitService.createParticipantToken(room.getLiveKitRoomName(), identity, createdBy);
@@ -79,7 +89,9 @@ public class RoomService {
         room.setLiveKitRoomName(liveKitRoomName);
         room.setInviteCode(UUID.randomUUID().toString());
         room.setStatus(RoomStatus.ACTIVE);
-        room.setCreatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        room.setCreatedAt(now);
+        room.setExpiresAt(now.plusHours(24));
         room.setCreatedBy(createdBy);
         if (participantIds != null && !participantIds.isEmpty()) {
             List<Contact> participants = contactRepository.findAllById(participantIds);
@@ -115,8 +127,12 @@ public class RoomService {
         if (room.getStatus() == RoomStatus.ENDED) {
             throw new RuntimeException("Room has ended");
         }
+        if (room.getExpiresAt() != null && LocalDateTime.now().isAfter(room.getExpiresAt())) {
+            throw new ResponseStatusException(HttpStatus.GONE, "invite_expired");
+        }
         String name = (displayName != null && !displayName.isBlank()) ? displayName : participantId;
         String token = liveKitService.createParticipantToken(room.getLiveKitRoomName(), participantId, name);
+        participantLogService.logJoin(room.getId(), name);
         return Map.of(
                 "token", token,
                 "url", liveKitPublicUrl,
@@ -139,5 +155,19 @@ public class RoomService {
             liveKitService.deleteRoom(room.getLiveKitRoomName());
         }
         roomRepository.delete(room);
+    }
+
+    public List<Room> endStaleRooms(int maxAgeMinutes) {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(maxAgeMinutes);
+        List<Room> stale = roomRepository.findByStatusAndCreatedAtBefore(RoomStatus.ACTIVE, cutoff);
+        for (Room room : stale) {
+            try {
+                liveKitService.deleteRoom(room.getLiveKitRoomName());
+            } catch (Exception ignored) {}
+            room.setStatus(RoomStatus.ENDED);
+            room.setEndedAt(LocalDateTime.now());
+            roomRepository.save(room);
+        }
+        return stale;
     }
 }

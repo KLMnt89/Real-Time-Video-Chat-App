@@ -29,6 +29,7 @@ public class Room {
 
     private LocalDateTime createdAt;
     private LocalDateTime endedAt;
+    private LocalDateTime expiresAt;
     private String createdBy;
 
     @ManyToMany

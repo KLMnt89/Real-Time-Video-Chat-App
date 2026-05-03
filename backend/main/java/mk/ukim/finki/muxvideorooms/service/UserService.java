@@ -63,6 +63,13 @@ public class UserService implements UserDetailsService {
         userRepository.save(user);
     }
 
+    @Transactional
+    public void updateLastSeen(String username) {
+        LocalDateTime now       = LocalDateTime.now();
+        LocalDateTime threshold = now.minusSeconds(60);
+        userRepository.updateLastSeenIfOld(username, now, threshold);
+    }
+
     public String encodePassword(String raw) {
         return passwordEncoder.encode(raw);
     }

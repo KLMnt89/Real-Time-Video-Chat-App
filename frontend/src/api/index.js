@@ -79,7 +79,10 @@ export const roomsApi = {
     end:       (id)   => api.post(`/rooms/${id}/end`),
     delete:    (id)   => api.delete(`/rooms/${id}`),
     join:      (inviteCode, participantId, displayName) =>
-        api.post(`/rooms/join/${inviteCode}`, null, { params: { participantId, displayName } })
+        api.post(`/rooms/join/${inviteCode}`, null, { params: { participantId, displayName } }),
+    getParticipantLogs:  (roomId) => api.get(`/rooms/${roomId}/participant-log`),
+    logParticipantLeave: (roomId, participantName) =>
+        api.post(`/rooms/${roomId}/participant-log/${encodeURIComponent(participantName)}/leave`),
 }
 
 export const chatApi = {

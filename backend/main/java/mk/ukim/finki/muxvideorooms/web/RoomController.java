@@ -2,6 +2,8 @@ package mk.ukim.finki.muxvideorooms.web;
 
 import jakarta.validation.constraints.NotBlank;
 import mk.ukim.finki.muxvideorooms.model.Room;
+import mk.ukim.finki.muxvideorooms.model.RoomParticipantLog;
+import mk.ukim.finki.muxvideorooms.service.RoomParticipantLogService;
 import mk.ukim.finki.muxvideorooms.service.RoomService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +20,11 @@ import java.util.Map;
 public class RoomController {
 
     private final RoomService roomService;
+    private final RoomParticipantLogService participantLogService;
 
-    public RoomController(RoomService roomService) {
-        this.roomService = roomService;
+    public RoomController(RoomService roomService, RoomParticipantLogService participantLogService) {
+        this.roomService          = roomService;
+        this.participantLogService = participantLogService;
     }
 
     @GetMapping
@@ -72,6 +76,17 @@ public class RoomController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         roomService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/participant-log")
+    public List<RoomParticipantLog> getParticipantLog(@PathVariable Long id) {
+        return participantLogService.getByRoom(id);
+    }
+
+    @PostMapping("/{id}/participant-log/{participantName}/leave")
+    public ResponseEntity<Void> logLeave(@PathVariable Long id, @PathVariable String participantName) {
+        participantLogService.logLeave(id, participantName);
         return ResponseEntity.noContent().build();
     }
 }

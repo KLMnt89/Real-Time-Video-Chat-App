@@ -27,7 +27,6 @@ function Toast({ toasts }) {
     )
 }
 
-
 /* ─── Post-call screen ───────────────────────────────────── */
 function PostCallScreen({ inviteCode, onRejoin }) {
     const navigate = useNavigate()
@@ -40,24 +39,49 @@ function PostCallScreen({ inviteCode, onRejoin }) {
             <div style={{ fontSize: 22, fontWeight: 500 }}>
                 <span style={{ color: '#185FA5' }}>hud</span>dle
             </div>
-            <div style={{ fontSize: 20, fontWeight: 600 }}>Го напуштивте повикот</div>
-            <div style={{ fontSize: 14, color: '#9ca3af' }}>Надеваме се дека состанокот беше продуктивен!</div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>You left the call</div>
+            <div style={{ fontSize: 14, color: '#9ca3af' }}>Hope the meeting was productive!</div>
             <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button onClick={() => navigate('/')} style={{
                     padding: '11px 24px', background: '#185FA5',
                     color: 'white', border: 'none', borderRadius: 8,
                     fontSize: 14, cursor: 'pointer', fontWeight: 500
                 }}>
-                    Кон Dashboard
+                    Back to Dashboard
                 </button>
                 <button onClick={onRejoin} style={{
                     padding: '11px 24px', background: 'white',
                     color: '#185FA5', border: '1.5px solid #185FA5', borderRadius: 8,
                     fontSize: 14, cursor: 'pointer', fontWeight: 500
                 }}>
-                    Повторно приклучи се
+                    Rejoin call
                 </button>
             </div>
+        </div>
+    )
+}
+
+/* ─── Expired screen ─────────────────────────────────────── */
+function ExpiredScreen() {
+    const navigate = useNavigate()
+    return (
+        <div style={{
+            minHeight: '100vh', background: '#f4f6f9',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 16
+        }}>
+            <div style={{ fontSize: 22, fontWeight: 500 }}>
+                <span style={{ color: '#185FA5' }}>hud</span>dle
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>Link expired</div>
+            <div style={{ fontSize: 14, color: '#9ca3af' }}>This invite link has expired (valid for 24 hours).</div>
+            <button onClick={() => navigate('/')} style={{
+                marginTop: 8, padding: '11px 24px', background: '#185FA5',
+                color: 'white', border: 'none', borderRadius: 8,
+                fontSize: 14, cursor: 'pointer', fontWeight: 500
+            }}>
+                Back to Dashboard
+            </button>
         </div>
     )
 }
@@ -73,20 +97,20 @@ function ConfirmLeave({ onConfirm, onCancel }) {
                 background: 'white', borderRadius: 16, padding: 28,
                 width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
             }}>
-                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Напушти повик?</div>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Leave call?</div>
                 <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 24 }}>
-                    Дали сте сигурни дека сакате да го напуштите состанокот?
+                    Are you sure you want to leave the meeting?
                 </div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                     <button onClick={onCancel} style={{
                         padding: '9px 20px', background: '#f4f6f9',
                         border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer'
-                    }}>Откажи</button>
+                    }}>Cancel</button>
                     <button onClick={onConfirm} style={{
                         padding: '9px 20px', background: '#991B1B',
                         color: 'white', border: 'none', borderRadius: 8,
                         fontSize: 13, cursor: 'pointer', fontWeight: 500
-                    }}>Напушти</button>
+                    }}>Leave</button>
                 </div>
             </div>
         </div>
@@ -99,6 +123,7 @@ export default function JoinRoom() {
     const { user } = useAuth()
     const [session, setSession] = useState(null)
     const [error, setError]     = useState(null)
+    const [expired, setExpired] = useState(false)
     const [left, setLeft]       = useState(false)
 
     const displayName = user ? `${user.firstName} ${user.lastName}` : null
@@ -110,14 +135,17 @@ export default function JoinRoom() {
         try {
             const res = await roomsApi.join(inviteCode, identity, name)
             setSession({ token: res.data.token, url: res.data.url, name, roomId: res.data.roomId })
-        } catch {
-            setError('Не може да се приклучи — собата можеби не постои или е завршена.')
+        } catch (err) {
+            if (err.response?.status === 410) {
+                setExpired(true)
+            } else {
+                setError('Could not join — the room may not exist or has ended.')
+            }
         }
     }, [inviteCode, identity])
 
     useEffect(() => {
         if (!user) return
-        // If this tab was opened by the host, use the pre-stored token directly
         const hostKey = `huddle_host_${inviteCode}`
         const raw = localStorage.getItem(hostKey)
         if (raw) {
@@ -131,10 +159,11 @@ export default function JoinRoom() {
         doJoin(displayName)
     }, [user])
 
-    // Redirect unauthenticated users to login, then back here
     if (!user) {
         return <Navigate to={`/login?redirect=/join/${inviteCode}`} replace />
     }
+
+    if (expired) return <ExpiredScreen />
 
     if (left) return <PostCallScreen inviteCode={inviteCode} onRejoin={() => {
         setLeft(false)
@@ -168,11 +197,11 @@ export default function JoinRoom() {
                     </div>
                     <div style={{ color: '#A32D2D', marginBottom: 16 }}>{error}</div>
                     <button onClick={() => doJoin(displayName)} className="btn btn-primary">
-                        Обиди се повторно
+                        Try again
                     </button>
                 </div>
             ) : (
-                <div style={{ color: '#6b7280', fontSize: 14 }}>Поврзување...</div>
+                <div style={{ color: '#6b7280', fontSize: 14 }}>Connecting...</div>
             )}
         </div>
     )
@@ -198,6 +227,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
     const [chatInput, setChatInput]   = useState('')
     const [noteText, setNoteText]     = useState('')
     const [noteSaved, setNoteSaved]   = useState(false)
+    const [participantLogs, setParticipantLogs] = useState([])
     const remotesDivRef = useRef(null)
     const noteDebounceRef = useRef(null)
 
@@ -264,19 +294,19 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
         })
 
         lkRoom.on(RoomEvent.ParticipantConnected, (participant) => {
-            addToast(`${participant.identity} се приклучи`)
+            addToast(`${participant.identity} joined`)
             syncParticipants(lkRoom)
         })
 
         lkRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
             document.getElementById(`tile-${participant.identity}`)?.remove()
             document.getElementById(`audio-${participant.identity}`)?.remove()
-            addToast(`${participant.identity} ја напушти собата`)
+            addToast(`${participant.identity} left`)
             syncParticipants(lkRoom)
         })
 
         lkRoom.on(RoomEvent.Disconnected, () => {
-            setError('Врската со собата е прекината.')
+            setError('Connection to room was lost.')
             setJoined(false)
         })
 
@@ -292,7 +322,6 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
         })
 
         const connect = async () => {
-            // Step 1: connect to LiveKit signal server — fatal if this fails
             try {
                 await lkRoom.connect(url, token)
             } catch (e) {
@@ -302,7 +331,6 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
             setJoined(true)
             syncParticipants(lkRoom)
 
-            // Step 2: acquire camera + mic — non-fatal (permission may be denied in incognito)
             try {
                 await lkRoom.localParticipant.enableCameraAndMicrophone()
                 const camPub = lkRoom.localParticipant.getTrackPublication(Track.Source.Camera)
@@ -315,7 +343,6 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                 setMuted(true)
             }
 
-            // Step 3: load persisted chat + notes
             if (roomId) {
                 chatApi.getMessages(roomId).then(r => setChatMessages(
                     r.data.map(m => ({ type: 'chat', sender: m.sender, content: m.content, sentAt: m.sentAt }))
@@ -323,6 +350,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                 roomNoteApi.getNote(roomId).then(r => {
                     if (r.data?.content) setNoteText(r.data.content)
                 }).catch(() => {})
+                roomsApi.getParticipantLogs(roomId).then(r => setParticipantLogs(r.data || [])).catch(() => {})
             }
         }
 
@@ -383,6 +411,16 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
         setTimeout(() => setNoteSaved(false), 2000)
     }
 
+    const exportNote = () => {
+        const blob = new Blob([noteText || ''], { type: 'text/plain' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `notes-${inviteCode?.slice(0, 8) || 'room'}.txt`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
     const toggleScreen = async () => {
         if (!screenSharing) {
             await roomRef.current?.localParticipant.setScreenShareEnabled(true)
@@ -393,9 +431,24 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
         }
     }
 
+    const handleLeave = async () => {
+        if (roomId) {
+            roomsApi.logParticipantLeave(roomId, name).catch(() => {})
+        }
+        await roomRef.current?.disconnect()
+        setShowConfirm(false)
+        onLeave()
+    }
+
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
+
+    const getJoinTime = (identity) => {
+        const log = participantLogs.find(l => l.participantName === identity && !l.leftAt)
+        if (!log?.joinedAt) return null
+        return new Date(log.joinedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    }
 
     const remoteCount = remoteParticipants.length
     const gridStyle = remoteCount === 1
@@ -435,7 +488,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                     padding: '4px 12px', borderRadius: 20,
                     border: joined ? '0.5px solid rgba(52,211,153,0.3)' : 'none'
                 }}>
-                    {joined ? '● Поврзан' : 'Поврзување...'} · {name}
+                    {joined ? '● Connected' : 'Connecting...'} · {name}
                 </div>
             </div>
 
@@ -471,7 +524,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                             fontSize: 11, color: 'white',
                             background: 'rgba(0,0,0,0.55)', padding: '2px 8px', borderRadius: 20
                         }}>
-                            {name} (ти)
+                            {name} (you)
                         </div>
                     </div>
                 </div>
@@ -491,7 +544,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                                 fontSize: 11, fontWeight: rightTab === tab ? 600 : 400,
                                 cursor: 'pointer', borderBottom: rightTab === tab ? '2px solid #378ADD' : '2px solid transparent'
                             }}>
-                                {tab === 'chat' ? 'Чет' : tab === 'participants' ? 'Учесници' : 'Белешки'}
+                                {tab === 'chat' ? 'Chat' : tab === 'participants' ? 'Participants' : 'Notes'}
                             </button>
                         ))}
                     </div>
@@ -502,13 +555,13 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                             <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 {chatMessages.length === 0 && (
                                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: 20 }}>
-                                        Нема пораки уште
+                                        No messages yet
                                     </div>
                                 )}
                                 {chatMessages.map((m, i) => (
                                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.sender === name ? 'flex-end' : 'flex-start' }}>
                                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>
-                                            {m.sender === name ? 'Ти' : m.sender}
+                                            {m.sender === name ? 'You' : m.sender}
                                         </div>
                                         <div style={{
                                             background: m.sender === name ? '#185FA5' : 'rgba(255,255,255,0.1)',
@@ -526,7 +579,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                                     value={chatInput}
                                     onChange={e => setChatInput(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendChat()}
-                                    placeholder="Напиши порака..."
+                                    placeholder="Type a message..."
                                     style={{
                                         flex: 1, background: 'rgba(255,255,255,0.08)',
                                         border: '0.5px solid rgba(255,255,255,0.12)',
@@ -547,7 +600,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                     {rightTab === 'participants' && (
                         <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
                             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
-                                {participants.length} учесник(и)
+                                {participants.length} participant(s)
                             </div>
                             {participants.map(p => (
                                 <div key={p.identity} style={{
@@ -564,9 +617,16 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                                     </div>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ fontSize: 12, color: 'white' }}>
-                                            {p.identity} {p.self ? '(ти)' : ''}
+                                            {p.identity} {p.self ? '(you)' : ''}
                                         </div>
-                                        <div style={{ fontSize: 11, color: '#34d399' }}>● Поврзан</div>
+                                        <div style={{ fontSize: 11, color: '#34d399' }}>
+                                            ● Connected
+                                            {!p.self && getJoinTime(p.identity) && (
+                                                <span style={{ color: 'rgba(255,255,255,0.3)', marginLeft: 6 }}>
+                                                    joined {getJoinTime(p.identity)}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -577,12 +637,12 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                     {rightTab === 'notes' && (
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, gap: 8 }}>
                             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-                                Заеднички белешки · синхронизирани во живо
+                                Shared notes · synced live
                             </div>
                             <textarea
                                 value={noteText}
                                 onChange={e => handleNoteChange(e.target.value)}
-                                placeholder="Запишете белешки тука — сите учесници ги гледаат во живо..."
+                                placeholder="Write notes here — all participants see them in real time..."
                                 style={{
                                     flex: 1, background: 'rgba(255,255,255,0.06)',
                                     border: '0.5px solid rgba(255,255,255,0.1)',
@@ -591,15 +651,27 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                                     fontFamily: 'inherit'
                                 }}
                             />
-                            <button
-                                onClick={saveNote}
-                                style={{
-                                    padding: '8px 0', background: '#185FA5',
-                                    color: 'white', border: 'none', borderRadius: 8,
-                                    fontSize: 12, cursor: 'pointer'
-                                }}>
-                                {noteSaved ? '✓ Зачувано' : 'Зачувај белешки'}
-                            </button>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                    onClick={saveNote}
+                                    style={{
+                                        flex: 1, padding: '8px 0', background: '#185FA5',
+                                        color: 'white', border: 'none', borderRadius: 8,
+                                        fontSize: 12, cursor: 'pointer'
+                                    }}>
+                                    {noteSaved ? '✓ Saved' : 'Save notes'}
+                                </button>
+                                <button
+                                    onClick={exportNote}
+                                    title="Download as text file"
+                                    style={{
+                                        padding: '8px 12px', background: 'rgba(255,255,255,0.08)',
+                                        color: 'white', border: '0.5px solid rgba(255,255,255,0.15)',
+                                        borderRadius: 8, fontSize: 12, cursor: 'pointer'
+                                    }}>
+                                    ↓
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -611,18 +683,18 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 background: 'rgba(0,0,0,0.4)', borderTop: '0.5px solid rgba(255,255,255,0.06)'
             }}>
-                <CtrlBtn active={muted} onClick={toggleMute} danger={muted} title={muted ? 'Вклучи микрофон' : 'Исклучи микрофон'}>
+                <CtrlBtn active={muted} onClick={toggleMute} danger={muted} title={muted ? 'Unmute microphone' : 'Mute microphone'}>
                     {muted ? <MicOffIcon /> : <MicIcon />}
                 </CtrlBtn>
-                <CtrlBtn active={camOff} onClick={toggleCam} danger={camOff} title={camOff ? 'Вклучи камера' : 'Исклучи камера'}>
+                <CtrlBtn active={camOff} onClick={toggleCam} danger={camOff} title={camOff ? 'Turn on camera' : 'Turn off camera'}>
                     {camOff ? <CamOffIcon /> : <CamIcon />}
                 </CtrlBtn>
-                <CtrlBtn active={screenSharing} onClick={toggleScreen} title="Сподели екран">
+                <CtrlBtn active={screenSharing} onClick={toggleScreen} title="Share screen">
                     <ScreenIcon />
                 </CtrlBtn>
                 <button
                     onClick={() => setShowConfirm(true)}
-                    title="Напушти повик"
+                    title="Leave call"
                     style={{
                         width: 52, height: 52, borderRadius: '50%',
                         background: '#991B1B', border: 'none', cursor: 'pointer',
@@ -635,11 +707,7 @@ function VideoRoom({ token, url, name, roomId, inviteCode, onLeave }) {
 
             {showConfirm && (
                 <ConfirmLeave
-                    onConfirm={async () => {
-                        await roomRef.current?.disconnect()
-                        setShowConfirm(false)
-                        onLeave()
-                    }}
+                    onConfirm={handleLeave}
                     onCancel={() => setShowConfirm(false)}
                 />
             )}

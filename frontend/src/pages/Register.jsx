@@ -18,7 +18,7 @@ export default function Register() {
             await authApi.register(form)
             navigate('/login')
         } catch (err) {
-            setError(err.response?.data?.error || 'Грешка при регистрација')
+            setError(err.response?.data?.error || 'Registration failed')
         } finally {
             setLoading(false)
         }
@@ -47,17 +47,17 @@ export default function Register() {
                     <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 6 }}>
                         <span style={{ color: '#185FA5' }}>hud</span>dle
                     </div>
-                    <div style={{ fontSize: 13, color: '#9ca3af' }}>Создадете нов акаунт</div>
+                    <div style={{ fontSize: 13, color: '#9ca3af' }}>Create a new account</div>
                 </div>
 
                 <form onSubmit={handleSubmit}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        {field('Ime', 'firstName', 'text', 'Марко')}
-                        {field('Презime', 'lastName', 'text', 'Петровски')}
+                        {field('First name', 'firstName', 'text', 'John')}
+                        {field('Last name', 'lastName', 'text', 'Doe')}
                     </div>
-                    {field('Корисничко ime', 'username', 'text', 'marko.petrovski')}
-                    {field('Email', 'email', 'email', 'marko@example.com')}
-                    {field('Лозинка', 'password', 'password', '••••••••')}
+                    {field('Username', 'username', 'text', 'john.doe')}
+                    {field('Email', 'email', 'email', 'john@example.com')}
+                    {field('Password', 'password', 'password', '••••••••')}
 
                     {error && (
                         <div style={{
@@ -79,14 +79,14 @@ export default function Register() {
                             fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer',
                             fontWeight: 500
                         }}>
-                        {loading ? 'Регистрација...' : 'Регистрирај се'}
+                        {loading ? 'Registering...' : 'Register'}
                     </button>
                 </form>
 
                 <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#9ca3af' }}>
-                    Веќе имате акаунт?{' '}
+                    Already have an account?{' '}
                     <Link to="/login" style={{ color: '#185FA5', textDecoration: 'none', fontWeight: 500 }}>
-                        Најави се
+                        Sign in
                     </Link>
                 </div>
             </div>

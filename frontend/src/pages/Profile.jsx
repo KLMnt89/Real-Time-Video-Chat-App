@@ -37,7 +37,7 @@ export default function Profile() {
             setForm(f => ({ ...f, password: '' }))
             setTimeout(() => setSuccess(false), 3000)
         } catch (err) {
-            setError(err.response?.data?.error || 'Грешка при зачувување')
+            setError(err.response?.data?.error || 'Error saving changes')
         } finally {
             setSaving(false)
         }
@@ -45,7 +45,7 @@ export default function Profile() {
 
     return (
         <div className="main-content">
-            <TopBar title="Профил" />
+            <TopBar title="Profile" />
             <div className="page">
                 <div style={{ maxWidth: 520 }}>
 
@@ -63,7 +63,7 @@ export default function Profile() {
                                 {form.firstName} {form.lastName}
                             </div>
                             <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 2 }}>
-                                @{form.username} · {user?.role === 'ROLE_ADMIN' ? 'Admin' : 'Корисник'}
+                                @{form.username} · {user?.role === 'ROLE_ADMIN' ? 'Admin' : 'User'}
                             </div>
                         </div>
                     </div>
@@ -72,17 +72,17 @@ export default function Profile() {
                         <form onSubmit={handleSave}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                                 <div>
-                                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Ime</label>
+                                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>First name</label>
                                     <input value={form.firstName} onChange={set('firstName')} style={{ width: '100%', boxSizing: 'border-box' }} />
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Презime</label>
+                                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Last name</label>
                                     <input value={form.lastName} onChange={set('lastName')} style={{ width: '100%', boxSizing: 'border-box' }} />
                                 </div>
                             </div>
 
                             <div style={{ marginBottom: 14 }}>
-                                <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Корисничко ime</label>
+                                <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Username</label>
                                 <input value={form.username} onChange={set('username')} style={{ width: '100%', boxSizing: 'border-box' }} />
                             </div>
 
@@ -93,7 +93,7 @@ export default function Profile() {
 
                             <div style={{ marginBottom: 20 }}>
                                 <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>
-                                    Нова лозинка <span style={{ color: '#b0b0b0' }}>(остави празно за да не менуваш)</span>
+                                    New password <span style={{ color: '#b0b0b0' }}>(leave blank to keep current)</span>
                                 </label>
                                 <input type="password" value={form.password} onChange={set('password')}
                                        placeholder="••••••••" style={{ width: '100%', boxSizing: 'border-box' }} />
@@ -113,13 +113,13 @@ export default function Profile() {
                                     background: '#E1F5EE', color: '#085041',
                                     borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14
                                 }}>
-                                    ✓ Промените се зачувани
+                                    ✓ Changes saved
                                 </div>
                             )}
 
                             <button type="submit" disabled={saving} className="btn btn-primary"
                                     style={{ minWidth: 120 }}>
-                                {saving ? 'Зачувување...' : 'Зачувај промени'}
+                                {saving ? 'Saving...' : 'Save changes'}
                             </button>
                         </form>
                     </div>
