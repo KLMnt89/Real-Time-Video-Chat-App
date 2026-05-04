@@ -1,45 +1,31 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { meetingsApi, contactsApi, roomsApi } from '../api'
 import { useAuth } from '../context/AuthContext'
-import { useNavigate } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────
 
-function timeAgo(dateStr) {
-    if (!dateStr) return '—'
-    const diff = new Date() - new Date(dateStr)
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1)  return 'just now'
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24)  return `${hrs}h ago`
-    const days = Math.floor(hrs / 24)
-    return `${days}d ago`
-}
-
-function buildActivity(meetings, rooms) {
-    const items = []
-    rooms.forEach(r => items.push({ label: `Room "${r.name}" is active`, time: r.createdAt, accent: '#1D9E75', bg: '#E1F5EE' }))
-    meetings.filter(m => m.status === 'ACTIVE'    && m.startedAt).forEach(m => items.push({ label: `"${m.title}" started`,   time: m.startedAt,   accent: '#185FA5', bg: '#E6F1FB' }))
-    meetings.filter(m => m.status === 'ENDED'     && m.endedAt  ).forEach(m => items.push({ label: `"${m.title}" ended`,     time: m.endedAt,     accent: '#6b7280', bg: '#F1EFE8' }))
-    meetings.filter(m => m.status === 'SCHEDULED' && m.scheduledAt).forEach(m => items.push({ label: `"${m.title}" scheduled`, time: m.scheduledAt, accent: '#378ADD', bg: '#E6F1FB' }))
-    return items.filter(i => i.time).sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 7)
-}
-
-const MEETING_LABEL = { ACTIVE: 'Active', SCHEDULED: 'Scheduled', ENDED: 'Ended', CANCELLED: 'Cancelled' }
-const MEETING_CLASS = { ACTIVE: 'badge-active', SCHEDULED: 'badge-scheduled', ENDED: 'badge-ended', CANCELLED: 'badge-cancelled' }
-const CONTACT_LABEL = { ONLINE: 'online', BUSY: 'busy', OFFLINE: 'offline' }
+const AVATAR_PALETTE = [
+    ['#E6F1FB', '#0C447C'], ['#EEEDFE', '#3C3489'], ['#EAF3DE', '#27500A'],
+    ['#FAEEDA', '#633806'], ['#FBEAF0', '#72243E'], ['#E1F5EE', '#085041'],
+]
 const CONTACT_CLASS = { ONLINE: 'badge-online', BUSY: 'badge-busy', OFFLINE: 'badge-offline' }
-const AVATAR_PALETTE = ['#E6F1FB:#0C447C','#EEEDFE:#3C3489','#EAF3DE:#27500A','#FAEEDA:#633806','#FBEAF0:#72243E','#E1F5EE:#085041']
+const CONTACT_LABEL = { ONLINE: 'online', BUSY: 'busy', OFFLINE: 'offline' }
 
-// ─── sub-components ──────────────────────────────────────────────────────────
+function initials(c) { return `${c.firstName?.[0] ?? ''}${c.lastName?.[0] ?? ''}`.toUpperCase() }
+
+// ── Toast ──────────────────────────────────────────────────────────────────
 
 function Toast({ toasts }) {
     return (
-        <div style={{ position:'fixed', bottom:24, right:24, display:'flex', flexDirection:'column', gap:8, zIndex:1000, pointerEvents:'none' }}>
+        <div style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 1000, pointerEvents: 'none' }}>
             {toasts.map(t => (
-                <div key={t.id} style={{ background:'#1a1a2e', color:'white', padding:'10px 16px', borderRadius:10, fontSize:13, boxShadow:'0 4px 16px rgba(0,0,0,0.18)', animation:'slideIn 0.2s ease' }}>
+                <div key={t.id} style={{
+                    background: 'var(--color-text-primary)', color: 'var(--color-background-primary)',
+                    padding: '10px 16px', borderRadius: 10, fontSize: 13,
+                    animation: 'slideIn 0.2s ease',
+                }}>
                     {t.message}
                 </div>
             ))}
@@ -47,92 +33,7 @@ function Toast({ toasts }) {
     )
 }
 
-function SectionLabel({ children }) {
-    return (
-        <div style={{ fontSize:10, fontWeight:700, color:'#b0b0b0', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:12, marginTop:4 }}>
-            {children}
-        </div>
-    )
-}
-
-function CardTitle({ children, accent = '#185FA5', action }) {
-    return (
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ width:3, height:14, borderRadius:2, background:accent, flexShrink:0 }} />
-                <span style={{ fontSize:13, fontWeight:600, color:'#1a1a2e' }}>{children}</span>
-            </div>
-            {action}
-        </div>
-    )
-}
-
-function EmptyState({ text }) {
-    return <div style={{ fontSize:12, color:'#b0b0b0', padding:'6px 0' }}>{text}</div>
-}
-
-function MiniCalendar({ meetings, onDaySelect, selectedDay }) {
-    const [view, setView] = useState(new Date())
-    const year = view.getFullYear()
-    const mo   = view.getMonth()
-
-    const firstDay   = new Date(year, mo, 1).getDay()
-    const daysInMo   = new Date(year, mo + 1, 0).getDate()
-    const offset     = firstDay === 0 ? 6 : firstDay - 1
-
-    const meetingDays = new Set(
-        meetings.filter(m => m.scheduledAt).map(m => {
-            const d = new Date(m.scheduledAt)
-            return d.getFullYear() === year && d.getMonth() === mo ? d.getDate() : null
-        }).filter(Boolean)
-    )
-
-    const today      = new Date()
-    const isToday    = d => d === today.getDate() && year === today.getFullYear() && mo === today.getMonth()
-    const isSelected = d => selectedDay &&
-        d === new Date(selectedDay).getDate() &&
-        year === new Date(selectedDay).getFullYear() &&
-        mo   === new Date(selectedDay).getMonth()
-
-    const cells    = [...Array(offset).fill(null), ...Array.from({ length: daysInMo }, (_, i) => i + 1)]
-    const moLabel  = view.toLocaleString('en-US', { month:'long', year:'numeric' })
-
-    return (
-        <div>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                <button onClick={() => setView(new Date(year, mo - 1, 1))}
-                    style={{ background:'none', border:'0.5px solid rgba(0,0,0,0.12)', cursor:'pointer', padding:'3px 9px', borderRadius:6, color:'#6b7280', fontSize:14 }}>‹</button>
-                <span style={{ fontSize:12, fontWeight:600, textTransform:'capitalize', color:'#1a1a2e' }}>{moLabel}</span>
-                <button onClick={() => setView(new Date(year, mo + 1, 1))}
-                    style={{ background:'none', border:'0.5px solid rgba(0,0,0,0.12)', cursor:'pointer', padding:'3px 9px', borderRadius:6, color:'#6b7280', fontSize:14 }}>›</button>
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, marginBottom:4 }}>
-                {['Mo','Tu','We','Th','Fr','Sa','Su'].map((d,i) => (
-                    <div key={i} style={{ textAlign:'center', fontSize:9, fontWeight:700, color:'#c0c0c0', padding:'2px 0', letterSpacing:'0.03em' }}>{d}</div>
-                ))}
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2 }}>
-                {cells.map((d, i) => (
-                    <div key={i} onClick={() => d && onDaySelect(new Date(year, mo, d))}
-                        style={{
-                            textAlign:'center', padding:'5px 0', borderRadius:6, fontSize:12,
-                            cursor: d ? 'pointer' : 'default', position:'relative', transition:'background 0.1s',
-                            background: d && isSelected(d) ? '#185FA5' : d && isToday(d) ? '#E6F1FB' : 'transparent',
-                            color:      d && isSelected(d) ? 'white'   : d && isToday(d) ? '#185FA5' : d ? '#1a1a2e' : 'transparent',
-                            fontWeight: d && (isToday(d) || isSelected(d)) ? 700 : 400,
-                        }}>
-                        {d || ''}
-                        {d && meetingDays.has(d) && (
-                            <div style={{ position:'absolute', bottom:1, left:'50%', transform:'translateX(-50%)', width:4, height:4, borderRadius:'50%', background: isSelected(d) ? 'rgba(255,255,255,0.8)' : '#185FA5' }} />
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
+// ── Countdown hook ─────────────────────────────────────────────────────────
 
 function useCountdown(targetDate) {
     const [label, setLabel] = useState('')
@@ -140,14 +41,13 @@ function useCountdown(targetDate) {
         const calc = () => {
             if (!targetDate) return setLabel('')
             const diff = new Date(targetDate) - new Date()
-            if (diff < 0)           return setLabel('passed')
+            if (diff < 0)         return setLabel('passed')
             const mins = Math.floor(diff / 60000)
-            if (mins === 0)         return setLabel('now')
-            if (mins < 60)          return setLabel(`in ${mins}m`)
+            if (mins === 0)       return setLabel('now')
+            if (mins < 60)        return setLabel(`in ${mins}m`)
             const hrs = Math.floor(mins / 60)
-            if (hrs < 24)           return setLabel(`in ${hrs}h`)
-            const days = Math.floor(hrs / 24)
-            return setLabel(`in ${days}d`)
+            if (hrs < 24)         return setLabel(`in ${hrs}h`)
+            return setLabel(`in ${Math.floor(hrs / 24)}d`)
         }
         calc()
         const t = setInterval(calc, 30000)
@@ -156,31 +56,249 @@ function useCountdown(targetDate) {
     return label
 }
 
+// ── Upcoming item ──────────────────────────────────────────────────────────
+
 function UpcomingItem({ m }) {
     const countdown = useCountdown(m.scheduledAt)
+    const isLive    = m.status === 'ACTIVE'
     const mins      = m.scheduledAt ? Math.floor((new Date(m.scheduledAt) - new Date()) / 60000) : 999
-    const urgent    = mins >= 0 && mins < 60
+    const urgent    = !isLive && mins >= 0 && mins < 60
+
+    const dotColor  = isLive ? '#1D9E75' : '#185FA5'
+    const badgeText = isLive ? 'Live' : countdown
+    const badgeBg   = isLive ? 'var(--green-light)' : urgent ? 'var(--amber-light)' : 'var(--blue-light)'
+    const badgeClr  = isLive ? 'var(--green-800)'   : urgent ? 'var(--amber-800)'   : 'var(--blue-800)'
+
     return (
-        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'0.5px solid rgba(0,0,0,0.05)' }}>
-            <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0, background: urgent ? '#BA7517' : '#185FA5' }} />
-            <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.title}</div>
-                <div style={{ fontSize:11, color:'#9ca3af', marginTop:1 }}>
-                    {m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-US', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotColor }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text-primary)' }}>
+                    {m.title}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>
+                    {m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                 </div>
             </div>
-            <span style={{ fontSize:11, padding:'3px 8px', borderRadius:6, fontWeight:600, whiteSpace:'nowrap', background: urgent ? '#FAEEDA' : '#E6F1FB', color: urgent ? '#633806' : '#0C447C' }}>
-                {countdown}
-            </span>
+            <span className="badge" style={{ background: badgeBg, color: badgeClr }}>{badgeText}</span>
         </div>
     )
 }
 
-// ─── main ────────────────────────────────────────────────────────────────────
+// ── Calendar ───────────────────────────────────────────────────────────────
+
+function Calendar({ meetings, onDaySelect, selectedDay }) {
+    const [view,    setView]    = useState(new Date())
+    const [hovered, setHovered] = useState(null)
+
+    const year    = view.getFullYear()
+    const mo      = view.getMonth()
+    const today   = new Date()
+
+    const firstDay = new Date(year, mo, 1).getDay()
+    const daysInMo = new Date(year, mo + 1, 0).getDate()
+    const offset   = firstDay === 0 ? 6 : firstDay - 1
+
+    // group meetings by day-of-month for this view month
+    const byDay = {}
+    meetings.filter(m => m.scheduledAt).forEach(m => {
+        const d = new Date(m.scheduledAt)
+        if (d.getFullYear() === year && d.getMonth() === mo) {
+            const k = d.getDate()
+            if (!byDay[k]) byDay[k] = []
+            byDay[k].push(m)
+        }
+    })
+
+    const isToday = d =>
+        d === today.getDate() && year === today.getFullYear() && mo === today.getMonth()
+
+    const isSelected = d =>
+        !!selectedDay &&
+        d === new Date(selectedDay).getDate() &&
+        year === new Date(selectedDay).getFullYear() &&
+        mo   === new Date(selectedDay).getMonth()
+
+    const cells  = [...Array(offset).fill(null), ...Array.from({ length: daysInMo }, (_, i) => i + 1)]
+    const moLabel = view.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+
+    const navBtn = (label, onClick) => (
+        <button onClick={onClick} style={{
+            width: 28, height: 28,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'transparent', border: '0.5px solid var(--color-border-secondary)',
+            borderRadius: 7, cursor: 'pointer', color: 'var(--color-text-secondary)',
+            fontSize: 15, lineHeight: 1, fontFamily: 'inherit',
+            transition: 'background 0.1s',
+        }}>{label}</button>
+    )
+
+    return (
+        <div>
+            {/* Header row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' }}>
+                    {moLabel}
+                </span>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <button
+                        onClick={() => setView(new Date(today.getFullYear(), today.getMonth(), 1))}
+                        style={{
+                            height: 28, padding: '0 10px', background: 'transparent',
+                            border: '0.5px solid var(--color-border-secondary)', borderRadius: 7,
+                            cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 11,
+                            fontFamily: 'inherit', transition: 'background 0.1s',
+                        }}>
+                        Today
+                    </button>
+                    {navBtn('‹', () => setView(new Date(year, mo - 1, 1)))}
+                    {navBtn('›', () => setView(new Date(year, mo + 1, 1)))}
+                </div>
+            </div>
+
+            {/* Day-of-week headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', marginBottom: 4 }}>
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
+                    <div key={i} style={{
+                        textAlign: 'center', fontSize: 10, fontWeight: 600,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        color: i >= 5 ? 'var(--amber-800)' : 'var(--color-text-muted)',
+                        padding: '0 0 8px',
+                    }}>{d}</div>
+                ))}
+            </div>
+
+            {/* Day cells */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+                {cells.map((d, i) => {
+                    if (!d) return <div key={i} />
+                    const isT    = isToday(d)
+                    const isSel  = isSelected(d)
+                    const isHov  = hovered === i && !isT
+                    const count  = byDay[d]?.length ?? 0
+                    const weekend = i % 7 >= 5
+
+                    return (
+                        <div
+                            key={i}
+                            onClick={() => onDaySelect(isSel ? null : new Date(year, mo, d))}
+                            onMouseEnter={() => setHovered(i)}
+                            onMouseLeave={() => setHovered(null)}
+                            style={{
+                                display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', justifyContent: 'center',
+                                height: 44, cursor: 'pointer', borderRadius: 9,
+                                background: isT
+                                    ? '#185FA5'
+                                    : isSel
+                                        ? 'var(--blue-light)'
+                                        : isHov
+                                            ? 'var(--color-background-secondary)'
+                                            : 'transparent',
+                                transition: 'background 0.1s',
+                            }}
+                        >
+                            <span style={{
+                                fontSize: 13, lineHeight: 1,
+                                fontWeight: isT || isSel ? 600 : 400,
+                                color: isT
+                                    ? '#fff'
+                                    : isSel
+                                        ? 'var(--blue-800)'
+                                        : weekend
+                                            ? 'var(--amber-800)'
+                                            : 'var(--color-text-primary)',
+                            }}>
+                                {d}
+                            </span>
+
+                            {/* Meeting dots */}
+                            {count > 0 && (
+                                <div style={{ display: 'flex', gap: 2, marginTop: 5 }}>
+                                    {Array.from({ length: Math.min(count, 3) }).map((_, k) => (
+                                        <div key={k} style={{
+                                            width: 4, height: 4, borderRadius: '50%',
+                                            background: isT
+                                                ? 'rgba(255,255,255,0.7)'
+                                                : k === 0
+                                                    ? '#1D9E75'
+                                                    : k === 1
+                                                        ? '#185FA5'
+                                                        : '#BA7517',
+                                        }} />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )
+                })}
+            </div>
+
+            {/* Selected day panel */}
+            {selectedDay && (() => {
+                const dayMtgs = meetings
+                    .filter(m => m.scheduledAt && new Date(m.scheduledAt).toDateString() === selectedDay.toDateString())
+                    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+                return (
+                    <div style={{ marginTop: 20, paddingTop: 18, borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                                {selectedDay.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </span>
+                            <button onClick={() => onDaySelect(null)} style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: 'var(--color-text-muted)', fontSize: 20, lineHeight: 1, padding: 0,
+                            }}>×</button>
+                        </div>
+                        {dayMtgs.length === 0 ? (
+                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '4px 0' }}>
+                                No meetings on this day
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                                {dayMtgs.map(m => {
+                                    const active = m.status === 'ACTIVE'
+                                    return (
+                                        <div key={m.id} style={{
+                                            display: 'flex', alignItems: 'center', gap: 10,
+                                            padding: '10px 14px', borderRadius: 9,
+                                            background: active ? 'var(--green-light)' : 'var(--color-background-secondary)',
+                                            border: '0.5px solid var(--color-border-tertiary)',
+                                        }}>
+                                            <div style={{
+                                                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                                                background: active ? '#1D9E75' : '#185FA5',
+                                            }} />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {m.title}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                                                    {new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                                    {(m.participants?.length ?? 0) > 0 && ` · ${m.participants.length} participant${m.participants.length !== 1 ? 's' : ''}`}
+                                                </div>
+                                            </div>
+                                            <span className={`badge badge-${m.status?.toLowerCase()}`}>
+                                                {active ? 'Live' : m.status?.charAt(0) + m.status?.slice(1).toLowerCase()}
+                                            </span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )
+            })()}
+        </div>
+    )
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-    const { user }   = useAuth()
-    const navigate   = useNavigate()
+    const { user }    = useAuth()
+    const navigate    = useNavigate()
+    const calendarRef = useRef(null)
 
     const [allMeetings,   setAllMeetings]   = useState([])
     const [contacts,      setContacts]      = useState([])
@@ -191,7 +309,6 @@ export default function Dashboard() {
     const [copiedId,      setCopiedId]      = useState(null)
     const [loading,       setLoading]       = useState(false)
     const [fetchLoading,  setFetchLoading]  = useState(true)
-    const [fetchError,    setFetchError]    = useState(null)
     const [toasts,        setToasts]        = useState([])
 
     const addToast = useCallback((msg) => {
@@ -203,8 +320,8 @@ export default function Dashboard() {
     const loadData = useCallback(() =>
         Promise.all([meetingsApi.getAll(), contactsApi.getAll(), roomsApi.getActive()])
             .then(([m, c, r]) => { setAllMeetings(m.data); setContacts(c.data); setActiveRooms(r.data) })
-            .catch(() => setFetchError('Error loading data'))
-    , [])
+            .catch(() => addToast('Error loading data'))
+    , [addToast])
 
     useEffect(() => { setFetchLoading(true); loadData().finally(() => setFetchLoading(false)) }, [loadData])
 
@@ -212,17 +329,21 @@ export default function Dashboard() {
         const token = localStorage.getItem('token')
         if (!token) return
         const es = new EventSource(`/api/sse/subscribe?token=${token}`)
-        es.addEventListener('room.created', (e) => {
-            try { addToast(`New room: ${JSON.parse(e.data).roomName}`) } catch {}
+        es.addEventListener('room.created', () => {
             roomsApi.getActive().then(r => setActiveRooms(r.data)).catch(() => {})
         })
-        es.addEventListener('meeting.started', (e) => {
-            try { addToast(`"${JSON.parse(e.data).titles?.join(', ') || 'Meeting'}" started`) } catch {}
+        es.addEventListener('meeting.started', () => {
             Promise.all([meetingsApi.getAll(), roomsApi.getActive()])
                 .then(([m, r]) => { setAllMeetings(m.data); setActiveRooms(r.data) }).catch(() => {})
         })
         return () => es.close()
-    }, [addToast])
+    }, [])
+
+    useEffect(() => {
+        if (window.location.hash === '#calendar' && calendarRef.current) {
+            setTimeout(() => calendarRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+        }
+    }, [fetchLoading])
 
     const generateRoom = async () => {
         setLoading(true)
@@ -233,7 +354,7 @@ export default function Dashboard() {
             const res = await roomsApi.create({
                 name:         `Huddle ${hh}:${mm}`,
                 createdBy:    user ? `${user.firstName} ${user.lastName}` : 'admin',
-                hostIdentity: user?.username || 'admin'
+                hostIdentity: user?.username || 'admin',
             })
             const room = res.data
             const link = `${window.location.origin}/join/${room.inviteCode}`
@@ -242,15 +363,11 @@ export default function Dashboard() {
             roomsApi.getActive().then(r => setActiveRooms(r.data))
             localStorage.setItem(`huddle_host_${room.inviteCode}`, JSON.stringify({
                 token: room.token, url: room.url, roomId: room.id, roomName: room.name,
-                name:  user ? `${user.firstName} ${user.lastName}` : 'Host'
+                name: user ? `${user.firstName} ${user.lastName}` : 'Host',
             }))
             window.open(link, '_blank')
         } catch (err) {
-            if (err.response?.status === 429) {
-                addToast('Rate limit reached — max 10 rooms per hour.')
-            } else {
-                addToast('Error creating room. Check if the server is running.')
-            }
+            addToast(err.response?.status === 429 ? 'Rate limit reached — max 10 rooms per hour.' : 'Error creating room.')
         } finally {
             setLoading(false)
         }
@@ -262,202 +379,166 @@ export default function Dashboard() {
         setTimeout(() => setCopiedId(null), 2000)
     }
 
-    const avatarColor = i => { const [bg, color] = AVATAR_PALETTE[i % AVATAR_PALETTE.length].split(':'); return { background: bg, color } }
-    const initials    = c => `${c.firstName?.[0] ?? ''}${c.lastName?.[0] ?? ''}`
-
-    const todayMeetings    = allMeetings.filter(m => m.scheduledAt && new Date(m.scheduledAt).toDateString() === new Date().toDateString())
-    const upcomingMeetings = allMeetings.filter(m => m.status === 'SCHEDULED' && m.scheduledAt && new Date(m.scheduledAt) > new Date()).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 5)
-    const selectedDayMtgs  = selectedDay ? allMeetings.filter(m => m.scheduledAt && new Date(m.scheduledAt).toDateString() === selectedDay.toDateString()) : []
-    const activity         = buildActivity(allMeetings, activeRooms)
+    const upcomingMeetings = [
+        ...allMeetings.filter(m => m.status === 'ACTIVE'),
+        ...allMeetings.filter(m => m.status === 'SCHEDULED' && m.scheduledAt && new Date(m.scheduledAt) > new Date())
+            .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)),
+    ].slice(0, 7)
 
     if (fetchLoading) return (
         <div className="main-content">
-            <TopBar title="Dashboard" />
-            <div className="page" style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:200 }}>
-                <div style={{ color:'#9ca3af', fontSize:14 }}>Loading...</div>
+            <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+                <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Loading…</div>
             </div>
         </div>
     )
 
     return (
         <div className="main-content">
-            <style>{`
-                @keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
-                @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
-                .dash-room-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.08) !important; transform:translateY(-1px); }
-                .dash-act-row:hover   { background:#f7f8fa; border-radius:6px; }
-                .dash-cal-day:hover   { background:#f0f4fa !important; }
-            `}</style>
-
             <Toast toasts={toasts} />
-            <TopBar title="Dashboard" />
+            <TopBar title="" />
 
             <div className="page">
-                {fetchError && (
-                    <div style={{ background:'#FCEBEB', color:'#A32D2D', borderRadius:8, padding:'10px 14px', fontSize:13, marginBottom:16 }}>
-                        {fetchError}
+
+                {/* ── Hero ──────────────────────────────────────────── */}
+                <div style={{ textAlign: 'center', padding: '32px 0 36px', animation: 'fadeUp 0.4s ease' }}>
+                    <div style={{
+                        fontSize: 52, fontWeight: 500, letterSpacing: '-2px',
+                        lineHeight: 1, marginBottom: 10,
+                    }}>
+                        <span style={{ color: '#185FA5' }}>hud</span>
+                        <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
                     </div>
-                )}
+                    <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 32 }}>
+                        Video meetings, simplified
+                    </div>
 
-                {/* ── Quick actions ─────────────────────────────────── */}
-                <div style={{ display:'flex', gap:8, marginBottom:24 }}>
-                    <button className="btn btn-primary" onClick={generateRoom} disabled={loading} style={{ fontWeight:500 }}>
-                        {loading ? 'Creating...' : '+ New room'}
-                    </button>
-                    <button className="btn" onClick={() => navigate('/meetings')} style={{ color:'#6b7280' }}>
-                        Schedule meeting
-                    </button>
-                    <button className="btn" onClick={() => navigate('/contacts')} style={{ color:'#6b7280' }}>
-                        Add contact
-                    </button>
-                </div>
-
-                {/* ── Generated link banner ─────────────────────────── */}
-                {generatedRoom && (
-                    <div style={{ background:'#E1F5EE', border:'0.5px solid #1D9E75', borderRadius:10, padding:'12px 16px', marginBottom:20, display:'flex', alignItems:'center', gap:12 }}>
-                        <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:12, fontWeight:600, color:'#085041', marginBottom:3 }}>Room created — share the link</div>
-                            <div style={{ fontSize:12, fontFamily:'monospace', color:'#1a1a2e', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{generatedLink}</div>
-                        </div>
-                        <button className="btn btn-sm" onClick={() => copyLink(generatedLink, 'banner')}>
-                            {copiedId === 'banner' ? '✓ Copied' : 'Copy'}
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <button className="btn-hero btn-hero-primary" onClick={generateRoom} disabled={loading}>
+                            {loading ? 'Creating…' : '⚡ Meeting now'}
                         </button>
-                        <button onClick={() => { setGeneratedRoom(null); setGeneratedLink('') }}
-                            style={{ background:'none', border:'none', cursor:'pointer', color:'#085041', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
+                        <button className="btn-hero" onClick={() => navigate('/meetings')}>
+                            📅 Schedule meeting
+                        </button>
+                        <button className="btn-hero" onClick={() => navigate('/contacts')}>
+                            👤 Add contact
+                        </button>
+                    </div>
+                </div>
+
+                {/* Invite banner */}
+                {generatedRoom && (
+                    <div style={{
+                        background: '#E6F1FB', border: '0.5px solid #185FA5',
+                        borderRadius: 'var(--border-radius-lg)',
+                        padding: '12px 16px', marginBottom: 24,
+                        display: 'flex', alignItems: 'center', gap: 12,
+                    }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M7 9a4 4 0 0 0 5.7.7l1.3-1.3a4 4 0 0 0-5.7-5.7L7 4" />
+                                <path d="M9 7a4 4 0 0 0-5.7-.7L2 7.7a4 4 0 0 0 5.7 5.7L9 12" />
+                            </svg>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: '#0C447C', marginBottom: 3 }}>Room created — share the invite link</div>
+                            <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#185FA5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{generatedLink}</div>
+                        </div>
+                        <button className="btn btn-sm" onClick={() => copyLink(generatedLink, 'banner')}>{copiedId === 'banner' ? '✓ Copied' : 'Copy'}</button>
+                        <button className="btn btn-sm btn-primary" onClick={() => window.open(generatedLink, '_blank')}>Join</button>
+                        <button onClick={() => { setGeneratedRoom(null); setGeneratedLink('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#185FA5', fontSize: 18, lineHeight: 1 }}>×</button>
                     </div>
                 )}
 
-                {/* ── OVERVIEW ──────────────────────────────────────── */}
-                <SectionLabel>Overview</SectionLabel>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:24 }}>
-                    {[
-                        { label:'Active Rooms',     val:activeRooms.length,       sub:'in progress',  accent:'#185FA5', bg:'#E6F1FB', live: activeRooms.length > 0 },
-                        { label:"Today's Meetings", val:todayMeetings.length,     sub:'scheduled',    accent:'#633806', bg:'#FAEEDA' },
-                        { label:'Contacts',         val:contacts.length,          sub:`${contacts.filter(c => c.status === 'ONLINE').length} online`, accent:'#085041', bg:'#E1F5EE' },
-                        { label:'Upcoming',         val:upcomingMeetings.length,  sub:'meetings',     accent:'#3C3489', bg:'#EEEDFE' },
-                    ].map((s, i) => (
-                        <div key={i} style={{ background:'white', borderRadius:10, padding:'14px 16px', border:'0.5px solid rgba(0,0,0,0.07)', borderLeft:`3px solid ${s.accent}`, position:'relative' }}>
-                            {s.live && <div style={{ position:'absolute', top:10, right:10, width:8, height:8, borderRadius:'50%', background:'#1D9E75', animation:'pulse 2s infinite' }} />}
-                            <div style={{ fontSize:11, color:'#9ca3af', marginBottom:6 }}>{s.label}</div>
-                            <div style={{ fontSize:30, fontWeight:700, color:s.accent, lineHeight:1 }}>{s.val}</div>
-                            <div style={{ fontSize:11, color:'#b0b0b0', marginTop:4 }}>{s.sub}</div>
-                        </div>
-                    ))}
-                </div>
+                {/* ── Two-column layout ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginBottom: 28 }}>
 
-                {/* ── MEETINGS ──────────────────────────────────────── */}
-                <SectionLabel>Meetings</SectionLabel>
-                <div style={{ display:'grid', gridTemplateColumns:'5fr 7fr', gap:16, marginBottom:24 }}>
+                    {/* Left: Active rooms + Contacts */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                    {/* Calendar */}
-                    <div className="card">
-                        <CardTitle accent="#185FA5">Calendar</CardTitle>
-                        <MiniCalendar meetings={allMeetings} onDaySelect={setSelectedDay} selectedDay={selectedDay} />
-
-                        {selectedDay && (
-                            <div style={{ marginTop:14, paddingTop:14, borderTop:'0.5px solid rgba(0,0,0,0.06)' }}>
-                                <div style={{ fontSize:11, fontWeight:600, color:'#9ca3af', textTransform:'capitalize', marginBottom:8 }}>
-                                    {selectedDay.toLocaleDateString('en-US', { weekday:'long', day:'numeric', month:'long' })}
-                                </div>
-                                {selectedDayMtgs.length === 0
-                                    ? <EmptyState text="No meetings on this day" />
-                                    : selectedDayMtgs.map(m => (
-                                        <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'0.5px solid rgba(0,0,0,0.05)' }}>
-                                            <div style={{ width:6, height:6, borderRadius:'50%', flexShrink:0, background: m.status === 'ACTIVE' ? '#1D9E75' : '#185FA5' }} />
-                                            <div style={{ flex:1, minWidth:0 }}>
-                                                <div style={{ fontSize:12, fontWeight:500 }}>{m.title}</div>
-                                                {m.scheduledAt && <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' })}</div>}
-                                            </div>
-                                            <span className={`badge ${MEETING_CLASS[m.status] || 'badge-scheduled'}`}>{MEETING_LABEL[m.status] || m.status}</span>
-                                        </div>
-                                    ))
-                                }
+                        {/* Active rooms */}
+                        <div className="card">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#1D9E75', animation: 'pulse 2s infinite', flexShrink: 0 }} />
+                                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)' }}>Active rooms</span>
+                                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>{activeRooms.length} live</span>
                             </div>
+
+                            {activeRooms.length === 0 ? (
+                                <div className="empty-state">No active rooms — start one with "Meeting now"</div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {activeRooms.map(r => (
+                                        <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)' }}>
+                                            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#E6F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#185FA5" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                                    <rect x="1" y="3.5" width="8.5" height="7" rx="1.5" />
+                                                    <path d="M9.5 6.3L13 4.5V9.5L9.5 7.7" />
+                                                </svg>
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text-primary)' }}>{r.name}</div>
+                                                <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-muted)', marginTop: 1 }}>{r.inviteCode?.slice(0, 16)}…</div>
+                                            </div>
+                                            <button className="btn btn-sm" onClick={() => copyLink(`${window.location.origin}/join/${r.inviteCode}`, r.id)}>{copiedId === r.id ? '✓' : 'Copy'}</button>
+                                            <button className="btn btn-sm btn-primary" onClick={() => window.open(`/join/${r.inviteCode}`, '_blank')}>Join</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Contacts */}
+                        <div className="card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)' }}>Contacts</span>
+                                <Link to="/contacts" style={{ fontSize: 11, color: '#185FA5', textDecoration: 'none' }}>all →</Link>
+                            </div>
+                            {contacts.length === 0 ? (
+                                <div className="empty-state">No contacts yet</div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {contacts.slice(0, 8).map((c, i) => {
+                                        const [bg, clr] = AVATAR_PALETTE[i % AVATAR_PALETTE.length]
+                                        return (
+                                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+                                                <div style={{ width: 30, height: 30, borderRadius: '50%', background: bg, color: clr, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, flexShrink: 0 }}>
+                                                    {initials(c)}
+                                                </div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.firstName} {c.lastName}</div>
+                                                    <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>
+                                                </div>
+                                                <span className={`badge ${CONTACT_CLASS[c.status] || 'badge-offline'}`}>
+                                                    {CONTACT_LABEL[c.status] || 'offline'}
+                                                </span>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right: Upcoming meetings */}
+                    <div className="card">
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', marginBottom: 14 }}>Upcoming meetings</div>
+                        {upcomingMeetings.length === 0 ? (
+                            <div className="empty-state">No upcoming meetings</div>
+                        ) : (
+                            upcomingMeetings.map(m => <UpcomingItem key={m.id} m={m} />)
                         )}
                     </div>
-
-                    {/* Upcoming meetings */}
-                    <div className="card">
-                        <CardTitle accent="#3C3489">Upcoming meetings</CardTitle>
-                        {upcomingMeetings.length === 0
-                            ? <EmptyState text="No scheduled meetings" />
-                            : upcomingMeetings.map(m => <UpcomingItem key={m.id} m={m} />)
-                        }
-                    </div>
                 </div>
 
-                {/* ── ACTIVE ROOMS ──────────────────────────────────── */}
-                <SectionLabel>Active Rooms</SectionLabel>
-                <div className="card" style={{ marginBottom:24 }}>
-                    <CardTitle accent="#1D9E75"
-                        action={activeRooms.length > 0 && <div style={{ width:8, height:8, borderRadius:'50%', background:'#1D9E75', animation:'pulse 2s infinite' }} />}>
-                        Rooms in progress
-                    </CardTitle>
-                    {activeRooms.length === 0
-                        ? <EmptyState text='No active rooms — click "+ New room" to start' />
-                        : (
-                            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                                {activeRooms.map(r => (
-                                    <div key={r.id} className="dash-room-card" style={{ border:'0.5px solid rgba(0,0,0,0.08)', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'center', gap:12, background:'white', transition:'all 0.15s', cursor:'default' }}>
-                                        <div style={{ width:8, height:8, borderRadius:'50%', background:'#1D9E75', animation:'pulse 2s infinite', flexShrink:0 }} />
-                                        <div style={{ flex:1, minWidth:0 }}>
-                                            <div style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
-                                            <div style={{ fontSize:11, color:'#9ca3af', fontFamily:'monospace', marginTop:1 }}>{r.inviteCode?.slice(0, 12)}…</div>
-                                        </div>
-                                        <button className="btn btn-sm" onClick={() => copyLink(`${window.location.origin}/join/${r.inviteCode}`, r.id)}>
-                                            {copiedId === r.id ? '✓ Copied' : 'Copy link'}
-                                        </button>
-                                        <button className="btn btn-sm btn-primary" onClick={() => window.open(`/join/${r.inviteCode}`, '_blank')}>
-                                            Join
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )
-                    }
+                {/* ── Calendar (full width) ── */}
+                <div ref={calendarRef} className="card" style={{ padding: '24px 28px' }} id="calendar">
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 20 }}>
+                        Calendar
+                    </div>
+                    <Calendar meetings={allMeetings} onDaySelect={setSelectedDay} selectedDay={selectedDay} />
                 </div>
 
-                {/* ── TEAM & ACTIVITY ───────────────────────────────── */}
-                <SectionLabel>Team & Activity</SectionLabel>
-                <div style={{ display:'grid', gridTemplateColumns:'7fr 5fr', gap:16 }}>
-
-                    {/* Activity feed */}
-                    <div className="card">
-                        <CardTitle accent="#378ADD">Recent activity</CardTitle>
-                        {activity.length === 0
-                            ? <EmptyState text="No activity yet" />
-                            : activity.map((a, i) => (
-                                <div key={i} className="dash-act-row" style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 6px', borderBottom:'0.5px solid rgba(0,0,0,0.04)' }}>
-                                    <div style={{ width:32, height:32, borderRadius:8, background:a.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                        <div style={{ width:8, height:8, borderRadius:'50%', background:a.accent }} />
-                                    </div>
-                                    <div style={{ flex:1, fontSize:12, color:'#1a1a2e' }}>{a.label}</div>
-                                    <div style={{ fontSize:11, color:'#b0b0b0', whiteSpace:'nowrap' }}>{timeAgo(a.time)}</div>
-                                </div>
-                            ))
-                        }
-                    </div>
-
-                    {/* Contacts */}
-                    <div className="card">
-                        <CardTitle accent="#085041">Contacts</CardTitle>
-                        {contacts.length === 0
-                            ? <EmptyState text="No contacts" />
-                            : contacts.slice(0, 7).map((c, i) => (
-                                <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom:'0.5px solid rgba(0,0,0,0.05)' }}>
-                                    <div className="avatar" style={avatarColor(i)}>{initials(c)}</div>
-                                    <div style={{ flex:1, minWidth:0 }}>
-                                        <div style={{ fontSize:12, fontWeight:500 }}>{c.firstName} {c.lastName}</div>
-                                        <div style={{ fontSize:11, color:'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.email}</div>
-                                    </div>
-                                    <span className={`badge ${CONTACT_CLASS[c.status] || 'badge-offline'}`}>
-                                        {CONTACT_LABEL[c.status] || 'offline'}
-                                    </span>
-                                </div>
-                            ))
-                        }
-                    </div>
-                </div>
             </div>
         </div>
     )

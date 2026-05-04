@@ -6,10 +6,10 @@ import { useAuth } from '../context/AuthContext'
 export default function Login() {
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
-    const [error, setError]       = useState(null)
-    const [loading, setLoading]   = useState(false)
-    const { login } = useAuth()
-    const navigate  = useNavigate()
+    const [error,    setError]    = useState(null)
+    const [loading,  setLoading]  = useState(false)
+    const { login }  = useAuth()
+    const navigate   = useNavigate()
     const [searchParams] = useSearchParams()
     const redirectTo = searchParams.get('redirect') || '/'
 
@@ -31,24 +31,19 @@ export default function Login() {
     }
 
     return (
-        <div style={{
-            minHeight: '100vh', background: '#f4f6f9',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-            <div style={{
-                background: 'white', borderRadius: 16, padding: 40,
-                width: 400, boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
-            }}>
+        <div className="auth-page">
+            <div className="auth-card">
                 <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                    <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 6 }}>
-                        <span style={{ color: '#185FA5' }}>hud</span>dle
+                    <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-0.6px', marginBottom: 6 }}>
+                        <span style={{ color: '#185FA5' }}>hud</span>
+                        <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
                     </div>
-                    <div style={{ fontSize: 13, color: '#9ca3af' }}>Sign in to your account</div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Sign in to your account</div>
                 </div>
 
                 <form onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: 14 }}>
-                        <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5 }}>
                             Username
                         </label>
                         <input
@@ -56,12 +51,12 @@ export default function Login() {
                             onChange={e => setUsername(e.target.value)}
                             placeholder="username"
                             autoFocus
-                            style={{ width: '100%', boxSizing: 'border-box' }}
+                            style={{ marginBottom: 0 }}
                         />
                     </div>
 
                     <div style={{ marginBottom: 20 }}>
-                        <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>
+                        <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5 }}>
                             Password
                         </label>
                         <input
@@ -69,14 +64,15 @@ export default function Login() {
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             placeholder="••••••••"
+                            style={{ marginBottom: 0 }}
                         />
                     </div>
 
                     {error && (
                         <div style={{
-                            background: '#FCEBEB', color: '#A32D2D',
-                            borderRadius: 8, padding: '10px 14px',
-                            fontSize: 13, marginBottom: 16
+                            background: 'var(--red-light)', color: 'var(--red)',
+                            borderRadius: 'var(--border-radius-md)',
+                            padding: '10px 14px', fontSize: 13, marginBottom: 16,
                         }}>
                             {error}
                         </div>
@@ -85,18 +81,13 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={loading || !username.trim() || !password.trim()}
-                        style={{
-                            width: '100%', padding: 11,
-                            background: loading ? '#9ca3af' : '#185FA5',
-                            color: 'white', border: 'none', borderRadius: 8,
-                            fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer',
-                            fontWeight: 500
-                        }}>
-                        {loading ? 'Signing in...' : 'Sign in'}
+                        className="btn btn-primary"
+                        style={{ width: '100%', padding: '10px 0', fontSize: 13 }}>
+                        {loading ? 'Signing in…' : 'Sign in'}
                     </button>
                 </form>
 
-                <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#9ca3af' }}>
+                <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--color-text-muted)' }}>
                     Don't have an account?{' '}
                     <Link to="/register" style={{ color: '#185FA5', textDecoration: 'none', fontWeight: 500 }}>
                         Register

@@ -31,29 +31,18 @@ function Toast({ toasts }) {
 function PostCallScreen({ inviteCode, onRejoin }) {
     const navigate = useNavigate()
     return (
-        <div style={{
-            minHeight: '100vh', background: '#f4f6f9',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 16
-        }}>
-            <div style={{ fontSize: 22, fontWeight: 500 }}>
-                <span style={{ color: '#185FA5' }}>hud</span>dle
+        <div className="auth-page" style={{ flexDirection: 'column', gap: 16 }}>
+            <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-0.5px' }}>
+                <span style={{ color: '#185FA5' }}>hud</span>
+                <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
             </div>
-            <div style={{ fontSize: 20, fontWeight: 600 }}>You left the call</div>
-            <div style={{ fontSize: 14, color: '#9ca3af' }}>Hope the meeting was productive!</div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                <button onClick={() => navigate('/')} style={{
-                    padding: '11px 24px', background: '#185FA5',
-                    color: 'white', border: 'none', borderRadius: 8,
-                    fontSize: 14, cursor: 'pointer', fontWeight: 500
-                }}>
+            <div style={{ fontSize: 18, fontWeight: 500, color: 'var(--color-text-primary)' }}>You left the call</div>
+            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Hope the meeting was productive!</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button onClick={() => navigate('/')} className="btn btn-primary" style={{ padding: '9px 22px', fontSize: 13 }}>
                     Back to Dashboard
                 </button>
-                <button onClick={onRejoin} style={{
-                    padding: '11px 24px', background: 'white',
-                    color: '#185FA5', border: '1.5px solid #185FA5', borderRadius: 8,
-                    fontSize: 14, cursor: 'pointer', fontWeight: 500
-                }}>
+                <button onClick={onRejoin} className="btn" style={{ padding: '9px 22px', fontSize: 13 }}>
                     Rejoin call
                 </button>
             </div>
@@ -65,21 +54,15 @@ function PostCallScreen({ inviteCode, onRejoin }) {
 function ExpiredScreen() {
     const navigate = useNavigate()
     return (
-        <div style={{
-            minHeight: '100vh', background: '#f4f6f9',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 16
-        }}>
-            <div style={{ fontSize: 22, fontWeight: 500 }}>
-                <span style={{ color: '#185FA5' }}>hud</span>dle
+        <div className="auth-page" style={{ flexDirection: 'column', gap: 16 }}>
+            <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-0.5px' }}>
+                <span style={{ color: '#185FA5' }}>hud</span>
+                <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
             </div>
-            <div style={{ fontSize: 20, fontWeight: 600 }}>Link expired</div>
-            <div style={{ fontSize: 14, color: '#9ca3af' }}>This invite link has expired (valid for 24 hours).</div>
-            <button onClick={() => navigate('/')} style={{
-                marginTop: 8, padding: '11px 24px', background: '#185FA5',
-                color: 'white', border: 'none', borderRadius: 8,
-                fontSize: 14, cursor: 'pointer', fontWeight: 500
-            }}>
+            <div style={{ fontSize: 18, fontWeight: 500, color: 'var(--color-text-primary)' }}>Link expired</div>
+            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>This invite link has expired (valid for 24 hours).</div>
+            <button onClick={() => navigate('/')} className="btn btn-primary"
+                style={{ marginTop: 8, padding: '9px 22px', fontSize: 13 }}>
                 Back to Dashboard
             </button>
         </div>
@@ -184,25 +167,20 @@ export default function JoinRoom() {
     )
 
     return (
-        <div style={{
-            minHeight: '100vh', background: '#f4f6f9',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
+        <div className="auth-page">
             {error ? (
-                <div style={{
-                    background: 'white', borderRadius: 16, padding: 32,
-                    width: 380, textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
-                }}>
-                    <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 16 }}>
-                        <span style={{ color: '#185FA5' }}>hud</span>dle
+                <div className="auth-card" style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-0.5px', marginBottom: 16 }}>
+                        <span style={{ color: '#185FA5' }}>hud</span>
+                        <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
                     </div>
-                    <div style={{ color: '#A32D2D', marginBottom: 16 }}>{error}</div>
+                    <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 16 }}>{error}</div>
                     <button onClick={() => doJoin(displayName)} className="btn btn-primary">
                         Try again
                     </button>
                 </div>
             ) : (
-                <div style={{ color: '#6b7280', fontSize: 14 }}>Connecting...</div>
+                <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Connecting…</div>
             )}
         </div>
     )

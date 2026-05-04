@@ -8,21 +8,22 @@ export default function Rooms() {
     const [filter,   setFilter]   = useState('ACTIVE')
     const [copiedId, setCopiedId] = useState(null)
     const [confirm,  setConfirm]  = useState(null)
+    const [error,    setError]    = useState(null)
 
-    const load = () => roomsApi.getAll().then(r => setRooms(r.data))
+    const load = () => roomsApi.getAll()
+        .then(r => setRooms(r.data))
+        .catch(() => setError('Could not load rooms.'))
+
     useEffect(() => { load() }, [])
 
     const handleEnd = async (id) => {
-        await roomsApi.end(id)
-        load()
+        try { await roomsApi.end(id); load() } catch { setError('Could not end room.') }
     }
 
-    const handleDelete = (id) => {
-        setConfirm({ id, message: 'Are you sure you want to delete this room? This action cannot be undone.' })
-    }
+    const handleDelete = (id) => setConfirm({ id, message: 'Delete this room? This cannot be undone.' })
 
     const confirmDelete = async () => {
-        await roomsApi.delete(confirm.id)
+        try { await roomsApi.delete(confirm.id) } catch { setError('Could not delete room.') }
         setConfirm(null)
         load()
     }
@@ -33,11 +34,14 @@ export default function Rooms() {
         setTimeout(() => setCopiedId(null), 2000)
     }
 
-    const filtered = rooms.filter(r => {
-        if (filter === 'ACTIVE') return r.status === 'ACTIVE'
-        if (filter === 'ENDED')  return r.status === 'ENDED'
-        return true
-    })
+    const counts = {
+        ALL:    rooms.length,
+        ACTIVE: rooms.filter(r => r.status === 'ACTIVE').length,
+        ENDED:  rooms.filter(r => r.status === 'ENDED').length,
+    }
+
+    const filtered = filter === 'ALL' ? rooms
+        : rooms.filter(r => r.status === filter)
 
     const FILTERS = [
         { key: 'ALL',    label: 'All' },
@@ -47,29 +51,33 @@ export default function Rooms() {
 
     return (
         <div className="main-content">
-            <TopBar title="Rooms" />
-            <div className="page">
+            <TopBar title="Groups" />
 
-                {/* Filter tabs */}
-                <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+            <div className="page">
+                {error && (
+                    <div style={{
+                        background: 'var(--red-light)', color: 'var(--red)',
+                        borderRadius: 'var(--border-radius-md)',
+                        padding: '10px 14px', fontSize: 13, marginBottom: 16,
+                        display: 'flex', justifyContent: 'space-between',
+                    }}>
+                        {error}
+                        <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 16, lineHeight: 1 }}>×</button>
+                    </div>
+                )}
+
+                <div className="filter-bar">
                     {FILTERS.map(f => (
-                        <button key={f.key} onClick={() => setFilter(f.key)}
-                            style={{
-                                padding: '6px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
-                                border: '0.5px solid rgba(0,0,0,0.12)', fontWeight: filter === f.key ? 600 : 400,
-                                background: filter === f.key ? '#185FA5' : 'white',
-                                color:      filter === f.key ? 'white'   : '#6b7280',
-                                transition: 'all 0.12s',
-                            }}>
+                        <button key={f.key}
+                            className={`filter-tab${filter === f.key ? ' active' : ''}`}
+                            onClick={() => setFilter(f.key)}>
                             {f.label}
-                            {f.key === 'ALL'    && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>{rooms.length}</span>}
-                            {f.key === 'ACTIVE' && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>{rooms.filter(r => r.status === 'ACTIVE').length}</span>}
-                            {f.key === 'ENDED'  && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>{rooms.filter(r => r.status === 'ENDED').length}</span>}
+                            <span className="count">{counts[f.key]}</span>
                         </button>
                     ))}
                 </div>
 
-                <div className="card">
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                     <table>
                         <thead>
                             <tr>
@@ -84,18 +92,22 @@ export default function Rooms() {
                             {filtered.map(r => (
                                 <tr key={r.id}>
                                     <td>
-                                        <div style={{ fontWeight: 500 }}>{r.name}</div>
-                                        <div style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'monospace' }}>{r.inviteCode}</div>
+                                        <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{r.name}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                                            {r.inviteCode}
+                                        </div>
                                     </td>
                                     <td>
                                         <span className={`badge ${r.status === 'ACTIVE' ? 'badge-active' : 'badge-ended'}`}>
                                             {r.status === 'ACTIVE' ? 'Active' : 'Ended'}
                                         </span>
                                     </td>
-                                    <td style={{ fontSize: 12, color: '#6b7280' }}>
+                                    <td style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                                         {r.createdAt ? new Date(r.createdAt).toLocaleString('en-US') : '—'}
                                     </td>
-                                    <td style={{ fontSize: 12 }}>{r.participants?.length ?? 0}</td>
+                                    <td style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                                        {r.participants?.length ?? 0}
+                                    </td>
                                     <td>
                                         <div style={{ display: 'flex', gap: 6 }}>
                                             <button className="btn btn-sm" onClick={() => copyLink(r.inviteCode, r.id)}>
@@ -108,7 +120,8 @@ export default function Rooms() {
                                                 </button>
                                             )}
                                             {r.status === 'ACTIVE' && (
-                                                <button className="btn btn-sm" style={{ background: '#FAEEDA', color: '#633806', border: 'none' }}
+                                                <button className="btn btn-sm"
+                                                    style={{ background: 'var(--amber-light)', color: 'var(--amber-800)', borderColor: 'transparent' }}
                                                     onClick={() => handleEnd(r.id)}>
                                                     End
                                                 </button>
@@ -122,8 +135,8 @@ export default function Rooms() {
                             ))}
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} style={{ color: '#9ca3af', textAlign: 'center', padding: 32 }}>
-                                        No rooms
+                                    <td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)', fontSize: 13 }}>
+                                        {filter === 'ACTIVE' ? 'No active rooms' : filter === 'ENDED' ? 'No ended rooms' : 'No rooms'}
                                     </td>
                                 </tr>
                             )}

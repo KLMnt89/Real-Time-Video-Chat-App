@@ -12,11 +12,11 @@ export default function Profile() {
         lastName:  user?.lastName  || '',
         username:  user?.username  || '',
         email:     user?.email     || '',
-        password:  ''
+        password:  '',
     })
-    const [saving, setSaving]   = useState(false)
+    const [saving,  setSaving]  = useState(false)
     const [success, setSuccess] = useState(false)
-    const [error, setError]     = useState(null)
+    const [error,   setError]   = useState(null)
 
     const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
@@ -43,26 +43,33 @@ export default function Profile() {
         }
     }
 
+    const label = (text, hint) => (
+        <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5 }}>
+            {text} {hint && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>{hint}</span>}
+        </label>
+    )
+
     return (
         <div className="main-content">
             <TopBar title="Profile" />
             <div className="page">
-                <div style={{ maxWidth: 520 }}>
+                <div style={{ maxWidth: 500 }}>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 28 }}>
+                    {/* Avatar header */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 24 }}>
                         <div style={{
-                            width: 72, height: 72, borderRadius: '50%',
-                            background: avatarBg, color: 'white',
+                            width: 64, height: 64, borderRadius: '50%',
+                            background: avatarBg, color: '#fff',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 26, fontWeight: 600, flexShrink: 0
+                            fontSize: 22, fontWeight: 500, flexShrink: 0,
                         }}>
                             {initials || '?'}
                         </div>
                         <div>
-                            <div style={{ fontSize: 18, fontWeight: 600 }}>
+                            <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--color-text-primary)' }}>
                                 {form.firstName} {form.lastName}
                             </div>
-                            <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 2 }}>
+                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
                                 @{form.username} · {user?.role === 'ROLE_ADMIN' ? 'Admin' : 'User'}
                             </div>
                         </div>
@@ -70,39 +77,38 @@ export default function Profile() {
 
                     <div className="card">
                         <form onSubmit={handleSave}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                                 <div>
-                                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>First name</label>
-                                    <input value={form.firstName} onChange={set('firstName')} style={{ width: '100%', boxSizing: 'border-box' }} />
+                                    {label('First name')}
+                                    <input value={form.firstName} onChange={set('firstName')} style={{ marginBottom: 0 }} />
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Last name</label>
-                                    <input value={form.lastName} onChange={set('lastName')} style={{ width: '100%', boxSizing: 'border-box' }} />
+                                    {label('Last name')}
+                                    <input value={form.lastName} onChange={set('lastName')} style={{ marginBottom: 0 }} />
                                 </div>
                             </div>
 
-                            <div style={{ marginBottom: 14 }}>
-                                <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Username</label>
-                                <input value={form.username} onChange={set('username')} style={{ width: '100%', boxSizing: 'border-box' }} />
+                            <div style={{ marginBottom: 12 }}>
+                                {label('Username')}
+                                <input value={form.username} onChange={set('username')} style={{ marginBottom: 0 }} />
                             </div>
 
-                            <div style={{ marginBottom: 14 }}>
-                                <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>Email</label>
-                                <input type="email" value={form.email} onChange={set('email')} style={{ width: '100%', boxSizing: 'border-box' }} />
+                            <div style={{ marginBottom: 12 }}>
+                                {label('Email')}
+                                <input type="email" value={form.email} onChange={set('email')} style={{ marginBottom: 0 }} />
                             </div>
 
                             <div style={{ marginBottom: 20 }}>
-                                <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 5 }}>
-                                    New password <span style={{ color: '#b0b0b0' }}>(leave blank to keep current)</span>
-                                </label>
+                                {label('New password', '(leave blank to keep current)')}
                                 <input type="password" value={form.password} onChange={set('password')}
-                                       placeholder="••••••••" style={{ width: '100%', boxSizing: 'border-box' }} />
+                                    placeholder="••••••••" style={{ marginBottom: 0 }} />
                             </div>
 
                             {error && (
                                 <div style={{
-                                    background: '#FCEBEB', color: '#A32D2D',
-                                    borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14
+                                    background: 'var(--red-light)', color: 'var(--red)',
+                                    borderRadius: 'var(--border-radius-md)',
+                                    padding: '10px 14px', fontSize: 13, marginBottom: 14,
                                 }}>
                                     {error}
                                 </div>
@@ -110,16 +116,17 @@ export default function Profile() {
 
                             {success && (
                                 <div style={{
-                                    background: '#E1F5EE', color: '#085041',
-                                    borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14
+                                    background: 'var(--green-light)', color: 'var(--green-800)',
+                                    borderRadius: 'var(--border-radius-md)',
+                                    padding: '10px 14px', fontSize: 13, marginBottom: 14,
                                 }}>
                                     ✓ Changes saved
                                 </div>
                             )}
 
                             <button type="submit" disabled={saving} className="btn btn-primary"
-                                    style={{ minWidth: 120 }}>
-                                {saving ? 'Saving...' : 'Save changes'}
+                                style={{ minWidth: 120 }}>
+                                {saving ? 'Saving…' : 'Save changes'}
                             </button>
                         </form>
                     </div>

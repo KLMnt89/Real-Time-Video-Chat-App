@@ -97,6 +97,13 @@ export const roomNoteApi = {
         api.put(`/rooms/${roomId}/note`, null, { params: { content, updatedBy } }),
 }
 
+export const groupsApi = {
+    getAll:  ()            => api.get('/groups'),
+    create:  (data)        => api.post('/groups', data),
+    update:  (id, data)    => api.put(`/groups/${id}`, data),
+    delete:  (id)          => api.delete(`/groups/${id}`),
+}
+
 export const notesApi = {
     getByMeeting: (meetingId)             => api.get(`/meetings/${meetingId}/notes`),
     create:       (meetingId, params)     => api.post(`/meetings/${meetingId}/notes`, null, { params }),
