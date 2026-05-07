@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { contactsApi, meetingsApi, roomsApi, groupsApi } from '../api'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import TopBar from '../components/TopBar'
 import ConfirmModal from '../components/ConfirmModal'
@@ -30,12 +31,14 @@ const STATUS_STYLE = {
 }
 
 export default function Groups() {
-    const { user } = useAuth()
-    const createdBy = user ? `${user.firstName} ${user.lastName}` : 'admin'
+    const { user }   = useAuth()
+    const navigate   = useNavigate()
+    const createdBy  = user ? `${user.firstName} ${user.lastName}` : 'admin'
 
     const [groups,        setGroups]        = useState([])
     const [contacts,      setContacts]      = useState([])
     const [selGroup,      setSelGroup]      = useState(null)
+    const [groupMeetings, setGroupMeetings] = useState([])
     const [showCreate,    setShowCreate]    = useState(false)
     const [showSched,     setShowSched]     = useState(false)
     const [newName,       setNewName]       = useState('')
@@ -92,7 +95,7 @@ export default function Groups() {
     const confirmDelete = async () => {
         try {
             await groupsApi.delete(confirm.id)
-            if (selGroup?.id === confirm.id) setSelGroup(null)
+            if (selGroup?.id === confirm.id) { setSelGroup(null); setGroupMeetings([]) }
             setGroups(g => g.filter(x => x.id !== confirm.id))
         } catch { setError('Could not delete group.') }
         setConfirm(null)
@@ -115,6 +118,11 @@ export default function Groups() {
         }
     }
 
+    const loadGroupMeetings = (groupId) =>
+        meetingsApi.getByGroup(groupId)
+            .then(r => setGroupMeetings(r.data))
+            .catch(() => setGroupMeetings([]))
+
     const handleSchedule = async () => {
         try {
             const memberIds = (selGroup?.contacts ?? []).map(c => c.id)
@@ -124,9 +132,11 @@ export default function Groups() {
                 scheduledAt:    schedForm.scheduledAt,
                 createdBy,
                 participantIds: memberIds,
+                groupId:        selGroup?.id,
             })
             setShowSched(false)
             setSchedForm({ title: '', description: '', scheduledAt: '' })
+            if (selGroup) loadGroupMeetings(selGroup.id)
         } catch { setError('Could not schedule meeting.') }
     }
 
@@ -174,7 +184,7 @@ export default function Groups() {
                             const mbs      = members(g)
                             const isActive = selGroup?.id === g.id
                             return (
-                                <div key={g.id} onClick={() => setSelGroup(g)}
+                                <div key={g.id} onClick={() => { setSelGroup(g); loadGroupMeetings(g.id) }}
                                     style={{
                                         padding: '13px 16px', cursor: 'pointer',
                                         borderBottom: '0.5px solid var(--color-border-tertiary)',
@@ -290,6 +300,57 @@ export default function Groups() {
                                             }}>
                                                 {c.status ? c.status.charAt(0) + c.status.slice(1).toLowerCase() : 'Offline'}
                                             </span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* Meetings card */}
+                            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                                <div style={{
+                                    padding: '12px 18px', fontSize: 11, fontWeight: 600,
+                                    color: 'var(--color-text-muted)', textTransform: 'uppercase',
+                                    letterSpacing: '0.06em', borderBottom: '0.5px solid var(--color-border-tertiary)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                }}>
+                                    <span>Meetings ({groupMeetings.length})</span>
+                                </div>
+
+                                {groupMeetings.length === 0 ? (
+                                    <div style={{ padding: '20px 18px', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                                        No meetings scheduled for this group
+                                    </div>
+                                ) : groupMeetings.map(m => {
+                                    const statusColors = {
+                                        SCHEDULED: { bg: 'var(--blue-light)',   color: 'var(--blue-800)',   label: 'Scheduled' },
+                                        ACTIVE:    { bg: 'var(--green-light)',  color: 'var(--green-800)',  label: 'Active' },
+                                        ENDED:     { bg: 'var(--color-background-secondary)', color: 'var(--color-text-muted)', label: 'Ended' },
+                                        CANCELLED: { bg: 'var(--red-light)',    color: 'var(--red)',        label: 'Cancelled' },
+                                        PASSED:    { bg: 'var(--amber-light)',  color: 'var(--amber-800)',  label: 'No show' },
+                                    }
+                                    const sc = statusColors[m.status] ?? statusColors.ENDED
+                                    return (
+                                        <div key={m.id} style={{
+                                            display: 'flex', alignItems: 'center', gap: 13,
+                                            padding: '13px 18px',
+                                            borderBottom: '0.5px solid var(--color-border-tertiary)',
+                                        }}>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', marginBottom: 2 }}>
+                                                    {m.title}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                                                    {m.scheduledAt
+                                                        ? new Date(m.scheduledAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                                        : '—'}
+                                                </div>
+                                            </div>
+                                            <span style={{ padding: '2px 9px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: sc.bg, color: sc.color }}>
+                                                {sc.label}
+                                            </span>
+                                            <button className="btn btn-sm" onClick={() => navigate(`/notes?meetingId=${m.id}`)}>
+                                                Notes
+                                            </button>
                                         </div>
                                     )
                                 })}

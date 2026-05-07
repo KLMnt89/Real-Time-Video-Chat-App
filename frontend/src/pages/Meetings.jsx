@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { meetingsApi, contactsApi, roomsApi } from '../api'
+import { meetingsApi, contactsApi, roomsApi, groupsApi } from '../api'
 import { useAuth } from '../context/AuthContext'
 import TopBar from '../components/TopBar'
 import ConfirmModal from '../components/ConfirmModal'
@@ -41,7 +41,7 @@ function CountdownBadge({ scheduledAt }) {
     )
 }
 
-function MeetingRow({ m, onStart, onEnd, onCancel, onDelete, onNotes }) {
+function MeetingRow({ m, onStart, onEnd, onCancel, onDelete, onNotes, canDelete }) {
     return (
         <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -59,6 +59,9 @@ function MeetingRow({ m, onStart, onEnd, onCancel, onDelete, onNotes }) {
                     )}
                     {m.status === 'ENDED' && (
                         <span className="badge" style={{ background: 'var(--color-background-secondary)', color: 'var(--color-text-muted)' }}>Ended</span>
+                    )}
+                    {m.status === 'PASSED' && (
+                        <span className="badge" style={{ background: 'var(--amber-light)', color: 'var(--amber-800)' }}>No show</span>
                     )}
                 </div>
                 {m.description && (
@@ -106,7 +109,9 @@ function MeetingRow({ m, onStart, onEnd, onCancel, onDelete, onNotes }) {
                     onClick={() => onNotes(m.id)}>
                     Notes
                 </button>
-                <button className="btn btn-sm btn-danger" onClick={() => onDelete(m.id)}>Delete</button>
+                {canDelete && (
+                    <button className="btn btn-sm btn-danger" onClick={() => onDelete(m.id)}>Delete</button>
+                )}
             </div>
         </div>
     )
@@ -119,9 +124,10 @@ export default function Meetings() {
 
     const [meetings,  setMeetings]  = useState([])
     const [contacts,  setContacts]  = useState([])
+    const [groups,    setGroups]    = useState([])
     const [filter,    setFilter]    = useState('upcoming')
     const [showModal, setShowModal] = useState(false)
-    const [form,      setForm]      = useState({ title: '', description: '', scheduledAt: '', participantIds: [] })
+    const [form,      setForm]      = useState({ title: '', description: '', scheduledAt: '', participantIds: [], groupId: null })
     const [confirm,   setConfirm]   = useState(null)
     const [error,     setError]     = useState(null)
 
@@ -132,11 +138,12 @@ export default function Meetings() {
     useEffect(() => {
         load()
         contactsApi.getAll().then(r => setContacts(r.data)).catch(() => {})
+        groupsApi.getAll().then(r => setGroups(r.data)).catch(() => {})
     }, [])
 
     const activeMeetings   = meetings.filter(m => m.status === 'ACTIVE')
     const upcomingMeetings = meetings.filter(m => m.status === 'SCHEDULED')
-    const endedMeetings    = meetings.filter(m => m.status === 'ENDED' || m.status === 'CANCELLED')
+    const endedMeetings    = meetings.filter(m => m.status === 'ENDED' || m.status === 'CANCELLED' || m.status === 'PASSED')
 
     const handleMeetNow = async () => {
         try {
@@ -157,9 +164,10 @@ export default function Meetings() {
                 title: form.title, description: form.description,
                 scheduledAt: form.scheduledAt, createdBy,
                 participantIds: form.participantIds,
+                groupId: form.groupId,
             })
             setShowModal(false)
-            setForm({ title: '', description: '', scheduledAt: '', participantIds: [] })
+            setForm({ title: '', description: '', scheduledAt: '', participantIds: [], groupId: null })
             load()
         } catch { setError('Could not create meeting.') }
     }
@@ -185,10 +193,21 @@ export default function Meetings() {
 
     const toggleParticipant = (id) => setForm(f => ({
         ...f,
+        groupId: null,
         participantIds: f.participantIds.includes(id)
             ? f.participantIds.filter(x => x !== id)
             : [...f.participantIds, id],
     }))
+
+    const selectGroup = (g) => setForm(f => {
+        const memberIds = (g.contacts ?? []).map(c => c.id)
+        const isSelected = f.groupId === g.id
+        return {
+            ...f,
+            groupId: isSelected ? null : g.id,
+            participantIds: isSelected ? [] : memberIds,
+        }
+    })
 
     const currentList = filter === 'upcoming' ? upcomingMeetings : endedMeetings
 
@@ -254,7 +273,8 @@ export default function Meetings() {
                     ) : (
                         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                             {activeMeetings.map(m => (
-                                <MeetingRow key={m.id} m={m} {...rowHandlers} />
+                                <MeetingRow key={m.id} m={m} {...rowHandlers}
+                                    canDelete={user?.role === 'ROLE_ADMIN' || m.createdBy === createdBy} />
                             ))}
                         </div>
                     )}
@@ -282,7 +302,8 @@ export default function Meetings() {
                     ) : (
                         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                             {currentList.map(m => (
-                                <MeetingRow key={m.id} m={m} {...rowHandlers} />
+                                <MeetingRow key={m.id} m={m} {...rowHandlers}
+                                    canDelete={user?.role === 'ROLE_ADMIN' || m.createdBy === createdBy} />
                             ))}
                         </div>
                     )}
@@ -292,34 +313,113 @@ export default function Meetings() {
             {/* Schedule modal */}
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <h3>Schedule meeting</h3>
-                        <input placeholder="Title" value={form.title}
-                            onChange={e => setForm({ ...form, title: e.target.value })} />
-                        <textarea placeholder="Description (optional)" rows={3} value={form.description}
-                            onChange={e => setForm({ ...form, description: e.target.value })} />
-                        <input type="datetime-local" value={form.scheduledAt}
-                            onChange={e => setForm({ ...form, scheduledAt: e.target.value })} />
-                        {contacts.length > 0 && (
-                            <>
-                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>Participants</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                                    {contacts.map(c => (
-                                        <div key={c.id} onClick={() => toggleParticipant(c.id)}
-                                            style={{
-                                                padding: '4px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                                                background: form.participantIds.includes(c.id) ? '#185FA5' : 'var(--color-background-secondary)',
-                                                color:      form.participantIds.includes(c.id) ? '#fff'    : 'var(--color-text-secondary)',
-                                                border: '0.5px solid var(--color-border-secondary)',
-                                                transition: 'all 0.12s',
-                                            }}>
-                                            {c.firstName} {c.lastName}
+                    <div className="modal" onClick={e => e.stopPropagation()}
+                        style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+
+                        {/* Fixed header */}
+                        <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+                            <h3 style={{ margin: '0 0 16px' }}>Schedule meeting</h3>
+                        </div>
+
+                        {/* Scrollable body */}
+                        <div style={{ overflowY: 'auto', flex: 1, padding: '0 24px', minHeight: 0 }}>
+                            <input placeholder="Title" value={form.title}
+                                onChange={e => setForm({ ...form, title: e.target.value })} />
+                            <textarea placeholder="Description (optional)" rows={2} value={form.description}
+                                onChange={e => setForm({ ...form, description: e.target.value })} />
+                            <input type="datetime-local" value={form.scheduledAt}
+                                onChange={e => setForm({ ...form, scheduledAt: e.target.value })} />
+
+                            {(groups.length > 0 || contacts.length > 0) && (
+                                <div style={{ marginBottom: 12 }}>
+                                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
+                                        Participants
+                                    </div>
+                                    <div style={{ border: '0.5px solid var(--color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+                                        {groups.length > 0 && (
+                                            <>
+                                                <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-background-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    Groups
+                                                </div>
+                                                {groups.map(g => {
+                                                    const selected = form.groupId === g.id
+                                                    return (
+                                                        <div key={g.id} onClick={() => selectGroup(g)}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: 10,
+                                                                padding: '9px 12px', cursor: 'pointer', fontSize: 13,
+                                                                borderBottom: '0.5px solid var(--color-border-tertiary)',
+                                                                background: selected ? 'var(--blue-light)' : 'transparent',
+                                                                transition: 'background 0.1s',
+                                                            }}>
+                                                            <div style={{
+                                                                width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                                                border: `1.5px solid ${selected ? '#185FA5' : 'var(--color-border-secondary)'}`,
+                                                                background: selected ? '#185FA5' : 'transparent',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            }}>
+                                                                {selected && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                                                            </div>
+                                                            <span style={{ flex: 1, fontWeight: 500, color: selected ? 'var(--blue-800)' : 'var(--color-text-primary)' }}>
+                                                                {g.name}
+                                                            </span>
+                                                            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                                                                {(g.contacts ?? []).length} members
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </>
+                                        )}
+                                        {contacts.length > 0 && (
+                                            <>
+                                                <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-background-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    Contacts
+                                                </div>
+                                                {contacts.map((c, idx) => {
+                                                    const selected = form.participantIds.includes(c.id)
+                                                    return (
+                                                        <div key={c.id} onClick={() => toggleParticipant(c.id)}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: 10,
+                                                                padding: '9px 12px', cursor: 'pointer', fontSize: 13,
+                                                                borderBottom: idx < contacts.length - 1 ? '0.5px solid var(--color-border-tertiary)' : 'none',
+                                                                background: selected ? 'var(--blue-light)' : 'transparent',
+                                                                transition: 'background 0.1s',
+                                                            }}>
+                                                            <div style={{
+                                                                width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                                                border: `1.5px solid ${selected ? '#185FA5' : 'var(--color-border-secondary)'}`,
+                                                                background: selected ? '#185FA5' : 'transparent',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            }}>
+                                                                {selected && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                                                            </div>
+                                                            <span style={{ color: selected ? 'var(--blue-800)' : 'var(--color-text-primary)' }}>
+                                                                {c.firstName} {c.lastName}
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </>
+                                        )}
+                                    </div>
+                                    {form.participantIds.length > 0 && (
+                                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                                            {form.participantIds.length} participant{form.participantIds.length !== 1 ? 's' : ''} selected
+                                            {form.groupId && ` · via ${groups.find(g => g.id === form.groupId)?.name}`}
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
-                            </>
-                        )}
-                        <div className="modal-actions">
+                            )}
+                        </div>
+
+                        {/* Fixed footer */}
+                        <div style={{
+                            padding: '14px 24px',
+                            borderTop: '0.5px solid var(--color-border-tertiary)',
+                            display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0,
+                        }}>
                             <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleCreate} disabled={!form.title.trim()}>
                                 Create

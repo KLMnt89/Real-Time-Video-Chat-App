@@ -33,6 +33,9 @@ public class Meeting {
     @JoinColumn(name = "room_id")
     private Room room;
 
+    @Column(name = "group_id")
+    private Long groupId;
+
     @ManyToMany
     @JoinTable(
             name = "meeting_participants",

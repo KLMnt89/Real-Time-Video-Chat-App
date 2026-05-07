@@ -87,7 +87,8 @@ function UpcomingItem({ m }) {
 
 // ── Calendar ───────────────────────────────────────────────────────────────
 
-function Calendar({ meetings, onDaySelect, selectedDay }) {
+function Calendar({ meetings, onDaySelect, selectedDay, onStart }) {
+    const navigate  = useNavigate()
     const [view,    setView]    = useState(new Date())
     const [hovered, setHovered] = useState(null)
 
@@ -278,9 +279,25 @@ function Calendar({ meetings, onDaySelect, selectedDay }) {
                                                     {(m.participants?.length ?? 0) > 0 && ` · ${m.participants.length} participant${m.participants.length !== 1 ? 's' : ''}`}
                                                 </div>
                                             </div>
-                                            <span className={`badge badge-${m.status?.toLowerCase()}`}>
-                                                {active ? 'Live' : m.status?.charAt(0) + m.status?.slice(1).toLowerCase()}
-                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span className={`badge badge-${m.status?.toLowerCase()}`}>
+                                                    {active ? 'Live' : m.status?.charAt(0) + m.status?.slice(1).toLowerCase()}
+                                                </span>
+                                                {m.status === 'SCHEDULED' && (
+                                                    <button className="btn btn-sm btn-primary"
+                                                        style={{ fontSize: 11, padding: '3px 10px' }}
+                                                        onClick={() => onStart?.(m.id)}>
+                                                        Join
+                                                    </button>
+                                                )}
+                                                {active && m.room?.inviteCode && (
+                                                    <button className="btn btn-sm btn-primary"
+                                                        style={{ fontSize: 11, padding: '3px 10px' }}
+                                                        onClick={() => window.open(`/join/${m.room.inviteCode}`, '_blank')}>
+                                                        Join
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     )
                                 })}
@@ -370,6 +387,18 @@ export default function Dashboard() {
             addToast(err.response?.status === 429 ? 'Rate limit reached — max 10 rooms per hour.' : 'Error creating room.')
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleStartMeeting = async (meetingId) => {
+        try {
+            const createdByName = user ? `${user.firstName} ${user.lastName}` : 'admin'
+            const res = await meetingsApi.start(meetingId, { createdBy: createdByName })
+            loadData()
+            const inviteCode = res.data.room?.inviteCode
+            if (inviteCode) window.open(`/join/${inviteCode}`, '_blank')
+        } catch {
+            addToast('Could not start meeting.')
         }
     }
 
@@ -536,7 +565,7 @@ export default function Dashboard() {
                     <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 20 }}>
                         Calendar
                     </div>
-                    <Calendar meetings={allMeetings} onDaySelect={setSelectedDay} selectedDay={selectedDay} />
+                    <Calendar meetings={allMeetings} onDaySelect={setSelectedDay} selectedDay={selectedDay} onStart={handleStartMeeting} />
                 </div>
 
             </div>

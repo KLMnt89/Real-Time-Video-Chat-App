@@ -35,6 +35,17 @@ public class MeetingScheduler {
         }
     }
 
+    @Scheduled(fixedDelay = 60_000)
+    public void markAbandonedMeetings() {
+        List<Meeting> passed = meetingService.markAbandoned();
+        if (!passed.isEmpty()) {
+            sseService.broadcast("meeting.passed", Map.of(
+                    "count", passed.size(),
+                    "titles", passed.stream().map(Meeting::getTitle).toList()
+            ));
+        }
+    }
+
     @Scheduled(fixedDelay = 300_000)
     public void autoCloseStaleRooms() {
         roomService.endStaleRooms(roomAutoCloseMinutes);

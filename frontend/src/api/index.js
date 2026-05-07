@@ -60,15 +60,16 @@ export const contactsApi = {
 }
 
 export const meetingsApi = {
-    getAll:  (params) => api.get('/meetings', { params }),
-    getToday: ()      => api.get('/meetings/today'),
-    getById: (id)     => api.get(`/meetings/${id}`),
-    create:  (params) => api.post('/meetings', null, { params }),
-    update:  (id, params) => api.put(`/meetings/${id}`, null, { params }),
-    start:   (id, params) => api.post(`/meetings/${id}/start`, null, { params }),
-    end:     (id)     => api.post(`/meetings/${id}/end`),
-    cancel:  (id)     => api.post(`/meetings/${id}/cancel`),
-    delete:  (id)     => api.delete(`/meetings/${id}`)
+    getAll:     (params)     => api.get('/meetings', { params }),
+    getToday:   ()           => api.get('/meetings/today'),
+    getById:    (id)         => api.get(`/meetings/${id}`),
+    getByGroup: (groupId)    => api.get(`/meetings/by-group/${groupId}`),
+    create:     (params)     => api.post('/meetings', null, { params }),
+    update:     (id, params) => api.put(`/meetings/${id}`, null, { params }),
+    start:      (id, params) => api.post(`/meetings/${id}/start`, null, { params }),
+    end:        (id)         => api.post(`/meetings/${id}/end`),
+    cancel:     (id)         => api.post(`/meetings/${id}/cancel`),
+    delete:     (id)         => api.delete(`/meetings/${id}`)
 }
 
 export const roomsApi = {

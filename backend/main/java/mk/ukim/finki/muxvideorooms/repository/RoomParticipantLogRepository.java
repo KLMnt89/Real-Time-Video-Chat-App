@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface RoomParticipantLogRepository extends JpaRepository<RoomParticipantLog, Long> {
     List<RoomParticipantLog> findByRoomId(Long roomId);
     Optional<RoomParticipantLog> findFirstByRoomIdAndParticipantNameAndLeftAtIsNull(Long roomId, String participantName);
+    int countByRoomId(Long roomId);
 }

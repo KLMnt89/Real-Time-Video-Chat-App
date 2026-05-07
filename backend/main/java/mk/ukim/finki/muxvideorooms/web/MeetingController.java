@@ -6,6 +6,7 @@ import mk.ukim.finki.muxvideorooms.model.enums.MeetingStatus;
 import mk.ukim.finki.muxvideorooms.service.MeetingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +35,11 @@ public class MeetingController {
         return meetingService.getForToday();
     }
 
+    @GetMapping("/by-group/{groupId}")
+    public List<Meeting> getByGroup(@PathVariable Long groupId) {
+        return meetingService.getByGroup(groupId);
+    }
+
     @GetMapping("/{id}")
     public Meeting getById(@PathVariable Long id) {
         return meetingService.getById(id);
@@ -44,10 +50,11 @@ public class MeetingController {
                                           @RequestParam(required = false) String description,
                                           @RequestParam @NotBlank String scheduledAt,
                                           @RequestParam @NotBlank String createdBy,
-                                          @RequestParam(required = false) List<Long> participantIds) {
+                                          @RequestParam(required = false) List<Long> participantIds,
+                                          @RequestParam(required = false) Long groupId) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(meetingService.create(title, description,
-                        LocalDateTime.parse(scheduledAt), createdBy, participantIds));
+                        LocalDateTime.parse(scheduledAt), createdBy, participantIds, groupId));
     }
 
     @PutMapping("/{id}")
@@ -76,8 +83,8 @@ public class MeetingController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        meetingService.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable Long id, Authentication authentication) {
+        meetingService.delete(id, authentication.getName());
         return ResponseEntity.noContent().build();
     }
 }

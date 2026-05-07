@@ -3,11 +3,16 @@ package mk.ukim.finki.muxvideorooms.service;
 import mk.ukim.finki.muxvideorooms.model.Contact;
 import mk.ukim.finki.muxvideorooms.model.Meeting;
 import mk.ukim.finki.muxvideorooms.model.Room;
+import mk.ukim.finki.muxvideorooms.model.User;
 import mk.ukim.finki.muxvideorooms.model.enums.MeetingStatus;
+import mk.ukim.finki.muxvideorooms.model.enums.UserRole;
 import mk.ukim.finki.muxvideorooms.repository.ContactRepository;
 import mk.ukim.finki.muxvideorooms.repository.MeetingRepository;
+import mk.ukim.finki.muxvideorooms.repository.RoomParticipantLogRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -21,13 +26,19 @@ public class MeetingService {
     private final MeetingRepository meetingRepository;
     private final ContactRepository contactRepository;
     private final RoomService roomService;
+    private final UserService userService;
+    private final RoomParticipantLogRepository participantLogRepository;
 
     public MeetingService(MeetingRepository meetingRepository,
                           ContactRepository contactRepository,
-                          RoomService roomService) {
-        this.meetingRepository = meetingRepository;
-        this.contactRepository = contactRepository;
-        this.roomService = roomService;
+                          RoomService roomService,
+                          UserService userService,
+                          RoomParticipantLogRepository participantLogRepository) {
+        this.meetingRepository      = meetingRepository;
+        this.contactRepository      = contactRepository;
+        this.roomService            = roomService;
+        this.userService            = userService;
+        this.participantLogRepository = participantLogRepository;
     }
 
     public List<Meeting> getAll() {
@@ -53,15 +64,20 @@ public class MeetingService {
         return meetingRepository.findByParticipants_Id(contactId);
     }
 
+    public List<Meeting> getByGroup(Long groupId) {
+        return meetingRepository.findByGroupId(groupId);
+    }
+
     public Meeting create(String title, String description,
                           LocalDateTime scheduledAt, String createdBy,
-                          List<Long> participantIds) {
+                          List<Long> participantIds, Long groupId) {
         Meeting meeting = new Meeting();
         meeting.setTitle(title);
         meeting.setDescription(description);
         meeting.setScheduledAt(scheduledAt);
         meeting.setCreatedBy(createdBy);
         meeting.setStatus(MeetingStatus.SCHEDULED);
+        meeting.setGroupId(groupId);
         if (participantIds != null && !participantIds.isEmpty()) {
             meeting.setParticipants(contactRepository.findAllById(participantIds));
         }
@@ -70,6 +86,9 @@ public class MeetingService {
 
     public Meeting start(Long id, String createdBy, List<Long> participantIds) {
         Meeting meeting = getById(id);
+        if (meeting.getStatus() == MeetingStatus.ACTIVE && meeting.getRoom() != null) {
+            return meeting;
+        }
         Room room = roomService.create(meeting.getTitle(), createdBy, participantIds);
         meeting.setRoom(room);
         meeting.setStatus(MeetingStatus.ACTIVE);
@@ -113,8 +132,29 @@ public class MeetingService {
         return due;
     }
 
-    public void delete(Long id) {
+    public List<Meeting> markAbandoned() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(15);
+        List<Meeting> candidates = meetingRepository.findByStatusAndStartedAtBefore(MeetingStatus.ACTIVE, cutoff);
+        List<Meeting> passed = new java.util.ArrayList<>();
+        for (Meeting m : candidates) {
+            if (m.getRoom() == null || participantLogRepository.countByRoomId(m.getRoom().getId()) == 0) {
+                m.setStatus(MeetingStatus.PASSED);
+                m.setEndedAt(LocalDateTime.now());
+                if (m.getRoom() != null) roomService.endRoom(m.getRoom().getId());
+                meetingRepository.save(m);
+                passed.add(m);
+            }
+        }
+        return passed;
+    }
+
+    public void delete(Long id, String requesterUsername) {
         Meeting meeting = getById(id);
+        User requester = userService.getByUsername(requesterUsername);
+        String displayName = requester.getFirstName() + " " + requester.getLastName();
+        if (requester.getRole() != UserRole.ROLE_ADMIN && !displayName.equals(meeting.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only delete meetings you created");
+        }
         if (meeting.getRoom() != null) {
             roomService.endRoom(meeting.getRoom().getId());
         }

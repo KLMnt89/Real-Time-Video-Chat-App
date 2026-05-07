@@ -70,6 +70,45 @@ export default function Notes() {
 
     const handleDeleteNote = (noteId) => setConfirm({ action: 'note', noteId, message: 'Delete this note?' })
 
+    const downloadNote = (note) => {
+        const blob = new Blob([note.content], { type: 'text/plain' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        const safeName = (selMeeting?.title || 'note').replace(/[^a-z0-9 _-]/gi, '_')
+        a.download = `${safeName} - Note.txt`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
+    const downloadRoomNote = () => {
+        const blob = new Blob([roomNote], { type: 'text/plain' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        const safeName = (selRoom?.name || 'room').replace(/[^a-z0-9 _-]/gi, '_')
+        a.download = `${safeName} - Room Notes.txt`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
+    const downloadRoomNoteById = async (r, e) => {
+        e.stopPropagation()
+        try {
+            const res     = await roomNoteApi.getNote(r.id)
+            const content = res.data?.content ?? ''
+            if (!content.trim()) return
+            const blob = new Blob([content], { type: 'text/plain' })
+            const url  = URL.createObjectURL(blob)
+            const a    = document.createElement('a')
+            a.href     = url
+            const safeName = r.name.replace(/[^a-z0-9 _-]/gi, '_')
+            a.download = `${safeName} - Room Notes.txt`
+            a.click()
+            URL.revokeObjectURL(url)
+        } catch { setError('Could not download note.') }
+    }
+
     const confirmAction = async () => {
         if (confirm.action === 'note') {
             try { await notesApi.delete(selMeeting.id, confirm.noteId) } catch { setError('Could not delete note.') }
@@ -198,13 +237,19 @@ export default function Notes() {
                                                         </div>
                                                         <div style={{ display: 'flex', gap: 6 }}>
                                                             <button className="btn btn-sm"
+                                                                onClick={() => downloadNote(n)}>
+                                                                ↓ Download
+                                                            </button>
+                                                            <button className="btn btn-sm"
                                                                 onClick={() => { setEditId(n.id); setEditContent(n.content) }}>
                                                                 Edit
                                                             </button>
-                                                            <button className="btn btn-sm btn-danger"
-                                                                onClick={() => handleDeleteNote(n.id)}>
-                                                                Delete
-                                                            </button>
+                                                            {user?.role === 'ROLE_ADMIN' && (
+                                                                <button className="btn btn-sm btn-danger"
+                                                                    onClick={() => handleDeleteNote(n.id)}>
+                                                                    Delete
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </>
@@ -247,18 +292,28 @@ export default function Notes() {
                             {rooms.map(r => (
                                 <div key={r.id} onClick={() => selectRoom(r)}
                                     style={{
-                                        padding: '11px 16px', cursor: 'pointer', fontSize: 13,
+                                        padding: '10px 12px 10px 16px', cursor: 'pointer', fontSize: 13,
                                         borderBottom: '0.5px solid var(--color-border-tertiary)',
                                         background: selRoom?.id === r.id ? 'var(--blue-light)' : 'transparent',
                                         color:      selRoom?.id === r.id ? 'var(--blue-800)'   : 'var(--color-text-primary)',
                                         transition: 'background 0.1s',
+                                        display: 'flex', alignItems: 'center', gap: 8,
                                     }}>
-                                    <div style={{ fontWeight: 500 }}>{r.name}</div>
-                                    <div style={{ marginTop: 4 }}>
-                                        <span className={`badge ${r.status === 'ACTIVE' ? 'badge-active' : 'badge-ended'}`}>
-                                            {r.status === 'ACTIVE' ? 'Active' : 'Ended'}
-                                        </span>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                                        <div style={{ marginTop: 3 }}>
+                                            <span className={`badge ${r.status === 'ACTIVE' ? 'badge-active' : 'badge-ended'}`}>
+                                                {r.status === 'ACTIVE' ? 'Active' : 'Ended'}
+                                            </span>
+                                        </div>
                                     </div>
+                                    <button
+                                        className="btn btn-sm"
+                                        onClick={(e) => downloadRoomNoteById(r, e)}
+                                        style={{ flexShrink: 0, fontSize: 11 }}
+                                        title={`Download note for ${r.name}`}>
+                                        ↓
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -283,10 +338,15 @@ export default function Notes() {
                                         {roomNoteSaved ? (
                                             <span style={{ fontSize: 12, color: 'var(--green-800)' }}>✓ Saved</span>
                                         ) : <span />}
-                                        <button className="btn btn-sm btn-primary"
-                                            onClick={handleSaveRoomNote} disabled={savingRoom}>
-                                            {savingRoom ? 'Saving…' : 'Save'}
-                                        </button>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                            <button className="btn btn-sm" onClick={downloadRoomNote} disabled={!roomNote.trim()}>
+                                                ↓ Download
+                                            </button>
+                                            <button className="btn btn-sm btn-primary"
+                                                onClick={handleSaveRoomNote} disabled={savingRoom}>
+                                                {savingRoom ? 'Saving…' : 'Save'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

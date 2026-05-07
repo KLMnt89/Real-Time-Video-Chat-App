@@ -432,15 +432,27 @@ function VideoRoom({ token, url, name, roomId, roomName, inviteCode, onLeave }) 
 
     const remoteCount = remoteParticipants.length
     const gridStyle = remoteCount === 1
-        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, flex: 1 }
+        ? { position: 'absolute', inset: 0, zIndex: 0, display: 'flex' }
         : remoteCount >= 2
         ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, flex: 1 }
         : { display: 'grid', gap: 12, flex: 1 }
 
+    useEffect(() => {
+        if (!remotesDivRef.current) return
+        remotesDivRef.current.querySelectorAll('[id^="tile-"]').forEach(tile => {
+            if (remoteCount === 1) {
+                tile.style.cssText = 'position:relative;background:#1f2937;overflow:hidden;width:100%;height:100%;'
+            } else {
+                tile.style.cssText = 'position:relative;background:#1f2937;border-radius:12px;overflow:hidden;aspect-ratio:16/9;'
+            }
+        })
+    }, [remoteCount])
+
     return (
         <div style={{
             width: '100vw', height: '100vh', background: '#111827',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden'
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            position: 'relative'
         }}>
             <style>{`
                 @keyframes fadeInUp {
@@ -489,10 +501,13 @@ function VideoRoom({ token, url, name, roomId, roomName, inviteCode, onLeave }) 
 
                     {/* Local PiP */}
                     <div style={{
-                        position: 'absolute', bottom: 24, right: 24,
-                        width: 180, borderRadius: 12, overflow: 'hidden',
+                        position: 'absolute',
+                        bottom: 24,
+                        right: 24,
+                        width: remoteCount === 1 ? 270 : 180,
+                        borderRadius: 12, overflow: 'hidden',
                         background: '#1f2937', border: '2px solid rgba(255,255,255,0.15)',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)'
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)', zIndex: 1
                     }}>
                         <video
                             ref={localVideoRef}

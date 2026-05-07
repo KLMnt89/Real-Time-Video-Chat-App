@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 import Sidebar from './components/Sidebar'
 import NetworkBackground from './components/NetworkBackground'
+import MeetingReminderBanner from './components/MeetingReminderBanner'
 import Dashboard from './pages/Dashboard'
 import Meetings from './pages/Meetings'
 import Contacts from './pages/Contacts'
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/join/:inviteCode" element={<JoinRoom />} />
           <Route path="/*" element={
             <PrivateRoute>
+              <MeetingReminderBanner />
               <div className="app">
                 <Sidebar />
                 <Routes>
