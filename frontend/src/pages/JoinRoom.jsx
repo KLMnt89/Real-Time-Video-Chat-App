@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { roomsApi, chatApi, roomNoteApi } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { Room, RoomEvent, Track } from 'livekit-client'
@@ -100,6 +100,89 @@ function ConfirmLeave({ onConfirm, onCancel }) {
     )
 }
 
+/* ─── Guest join panel ───────────────────────────────────── */
+function GuestJoinPanel({ inviteCode, onJoin, joinError }) {
+    const navigate = useNavigate()
+    const [firstName, setFirstName] = useState('')
+    const [lastName,  setLastName]  = useState('')
+    const [localError, setLocalError] = useState(null)
+    const [loading,    setLoading]    = useState(false)
+
+    const handleJoin = async (e) => {
+        e.preventDefault()
+        const first = firstName.trim()
+        const last  = lastName.trim()
+        if (!first || !last) { setLocalError('Please enter your first and last name.'); return }
+        setLoading(true)
+        setLocalError(null)
+        await onJoin(`${first} ${last}`)
+        setLoading(false)
+    }
+
+    const displayError = localError || joinError
+
+    return (
+        <div className="auth-page">
+            <div className="auth-card">
+                <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                    <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-0.6px', marginBottom: 6 }}>
+                        <span style={{ color: '#185FA5' }}>hud</span>
+                        <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>You've been invited to a meeting</div>
+                </div>
+
+                <form onSubmit={handleJoin}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                        <div>
+                            <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5 }}>First name</label>
+                            <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" autoFocus />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5 }}>Last name</label>
+                            <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe" />
+                        </div>
+                    </div>
+
+                    {displayError && (
+                        <div style={{
+                            background: 'var(--red-light)', color: 'var(--red)',
+                            borderRadius: 'var(--border-radius-md)',
+                            padding: '10px 14px', fontSize: 12, marginBottom: 12,
+                        }}>
+                            {displayError}
+                        </div>
+                    )}
+
+                    <button type="submit" disabled={loading} className="btn btn-primary"
+                        style={{ width: '100%', padding: '10px 0', fontSize: 13 }}>
+                        {loading ? 'Joining…' : 'Join as guest'}
+                    </button>
+                </form>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0' }}>
+                    <div style={{ flex: 1, height: '0.5px', background: 'var(--color-border-secondary)' }} />
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>or</span>
+                    <div style={{ flex: 1, height: '0.5px', background: 'var(--color-border-secondary)' }} />
+                </div>
+
+                <button onClick={() => navigate(`/login?redirect=/join/${inviteCode}`)} className="btn"
+                    style={{ width: '100%', padding: '10px 0', fontSize: 13, marginBottom: 16 }}>
+                    Login
+                </button>
+
+                <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    Don't have an account?{' '}
+                    <button onClick={() => navigate(`/register?redirect=/join/${inviteCode}`)}
+                        style={{ background: 'none', border: 'none', color: '#185FA5', fontSize: 12, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                        Register
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 /* ─── Main export ────────────────────────────────────────── */
 export default function JoinRoom() {
     const { inviteCode } = useParams()
@@ -108,15 +191,17 @@ export default function JoinRoom() {
     const [error, setError]     = useState(null)
     const [expired, setExpired] = useState(false)
     const [left, setLeft]       = useState(false)
+    const lastJoinRef = useRef(null)
 
     const displayName = user ? `${user.firstName} ${user.lastName}` : null
     const identity    = user?.username || displayName
 
-    const doJoin = useCallback(async (name) => {
+    const doJoin = useCallback(async (name, pid) => {
         if (!name?.trim()) return
         setError(null)
         try {
-            const res = await roomsApi.join(inviteCode, identity, name)
+            const res = await roomsApi.join(inviteCode, pid || name, name)
+            lastJoinRef.current = { name, pid: pid || name }
             setSession({ token: res.data.token, url: res.data.url, name, roomId: res.data.roomId, roomName: res.data.roomName })
         } catch (err) {
             if (err.response?.status === 410) {
@@ -125,7 +210,7 @@ export default function JoinRoom() {
                 setError('Could not join — the room may not exist or has ended.')
             }
         }
-    }, [inviteCode, identity])
+    }, [inviteCode])
 
     useEffect(() => {
         if (!user) return
@@ -139,19 +224,15 @@ export default function JoinRoom() {
                 return
             } catch {}
         }
-        doJoin(displayName)
+        doJoin(displayName, identity)
     }, [user])
-
-    if (!user) {
-        return <Navigate to={`/login?redirect=/join/${inviteCode}`} replace />
-    }
 
     if (expired) return <ExpiredScreen />
 
     if (left) return <PostCallScreen inviteCode={inviteCode} onRejoin={() => {
         setLeft(false)
         setSession(null)
-        doJoin(displayName)
+        doJoin(lastJoinRef.current?.name, lastJoinRef.current?.pid)
     }} />
 
     if (session) return (
@@ -166,6 +247,14 @@ export default function JoinRoom() {
         />
     )
 
+    if (!user) return (
+        <GuestJoinPanel
+            inviteCode={inviteCode}
+            onJoin={(name) => doJoin(name, name)}
+            joinError={error}
+        />
+    )
+
     return (
         <div className="auth-page">
             {error ? (
@@ -175,7 +264,7 @@ export default function JoinRoom() {
                         <span style={{ color: 'var(--color-text-primary)' }}>dle</span>
                     </div>
                     <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 16 }}>{error}</div>
-                    <button onClick={() => doJoin(displayName)} className="btn btn-primary">
+                    <button onClick={() => doJoin(displayName, identity)} className="btn btn-primary">
                         Try again
                     </button>
                 </div>

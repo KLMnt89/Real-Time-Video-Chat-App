@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { authApi } from '../api'
 
 export default function Register() {
@@ -7,6 +7,8 @@ export default function Register() {
     const [error,   setError]   = useState(null)
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
+    const redirectTo = searchParams.get('redirect') || ''
 
     const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
@@ -16,7 +18,7 @@ export default function Register() {
         setError(null)
         try {
             await authApi.register(form)
-            navigate('/login')
+            navigate(redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login')
         } catch (err) {
             setError(err.response?.data?.error || 'Registration failed')
         } finally {

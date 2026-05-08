@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 function NavIcon({ type }) {
@@ -70,6 +70,16 @@ const AVATAR_COLORS = ['#185FA5', '#3C3489', '#27500A', '#633806', '#72243E', '#
 export default function Sidebar() {
     const { user, logout } = useAuth()
     const navigate = useNavigate()
+    const location = useLocation()
+
+    const handleCalendarClick = (e) => {
+        if (location.pathname === '/') {
+            e.preventDefault()
+            document.getElementById('calendar')?.scrollIntoView({ behavior: 'smooth' })
+        } else {
+            navigate('/#calendar')
+        }
+    }
 
     const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase()
     const avatarBg  = AVATAR_COLORS[(user?.id ?? 0) % AVATAR_COLORS.length]
@@ -101,7 +111,25 @@ export default function Sidebar() {
 
             {/* Nav */}
             <nav style={{ flex: 1, padding: '10px 8px' }}>
-                {LINKS.map(item => (
+                {LINKS.map(item => item.noActive ? (
+                    <div
+                        key={item.to}
+                        onClick={handleCalendarClick}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 9,
+                            padding: '9px 10px',
+                            borderRadius: 'var(--border-radius-md)',
+                            fontSize: 14, marginBottom: 3, cursor: 'pointer',
+                            background: 'transparent',
+                            color: 'var(--color-text-secondary)',
+                            fontWeight: 400,
+                            transition: 'background 0.12s, color 0.12s',
+                        }}
+                    >
+                        <NavIcon type={item.icon} />
+                        {item.label}
+                    </div>
+                ) : (
                     <NavLink
                         key={item.to}
                         to={item.to}
